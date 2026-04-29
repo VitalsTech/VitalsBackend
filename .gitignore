@@ -1,0 +1,324 @@
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+.vscode/
+.idea/
+
+# Visual Studio Code
+*.code-workspace
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# MSBuild output
+*.pdb
+*.dll
+*.exe
+*.exe.config
+*.cache
+*.ilk
+*.log
+*.obj
+*.resharper
+*.tmp
+*.tmp_proj
+*.pidb
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Backup files
+*.[Bb]ak
+*.[Bb]ackup
+*.[Oo]ld
+*.[Rr]ej
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+*.nuget.props
+*.nuget.targets
+NuGet.exe
+nuget.exe
+nuget.config
+!nuget.config
+
+# .NET Core / .NET 8
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+*.coveragejson
+*.htmlcoverage
+*.cobertura.xml
+*.cr
+*.cov
+*.clover.xml
+*.gcov
+*.gcda
+*.gcno
+*.gcov
+*.coverage
+*.sonarqube/
+
+# Code coverage
+/CoverageResults/
+/CodeCoverage/
+*.coverage
+*.coveragexml
+
+# npm / Node.js (если есть фронтенд в проекте)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Docker
+docker-compose*.yml
+!docker-compose.yml
+!docker-compose.override.yml
+.dockerignore
+*.dockerignore
+*.containerignore
+
+# Docker volumes
+/.docker/
+/volumes/
+/vol/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Secrets
+**/appsettings.Secrets.json
+**/appsettings.*.Secrets.json
+**/secrets.json
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key
+**/*.crt
+**/*.cer
+**/certificate.pfx
+**/certificate.p12
+
+# Logs
+*.log
+*.logs
+logs/
+log/
+logging/
+serilog*.json
+*.txt.log
+
+# Temp files
+*.tmp
+*.temp
+*.cache
+*.swp
+*~
+~$*
+*.lock
+
+# User-specific files (macOS)
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Пакеты и зависимости
+*.nupkg
+*.snupkg
+*.nuget
+packages/
+lib/
+deps/
+
+# Результаты сборки (бинарные файлы)
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.dat
+
+# Rider
+.sonarlint/
+.sonar/
+
+# Visual Studio Code
+.history/
+*.vsix
+*.slnx
+*.vx
+
+# Файлы миграций (если генерируется много)
+Migrations/*.Designer.cs
+!Migrations/*.cs
+!Migrations/ModelSnapshot.cs
+
+# Пользовательские настройки запуска
+launchSettings.json
+!Properties/launchSettings.json
+
+# Файлы производительности и диагностики
+*.etl
+*.etlx
+*.diagsession
+*.vsp
+*.vspx
+*.timeline
+*.profiler
+*.profiling
+
+# Отчеты
+*.htmlcov
+*.xml
+*.cobertura.xml
+*.opencover.xml
+*.dotcover
+*.visualstudio.coverage
+*.clover
+*.junit.xml
+*.trx
+*.testresult
+
+# K6 нагрузочное тестирование (если используется)
+*.tar
+*.tgz
+*.gz
+
+# GraphQL (если используется)
+schema.graphql
+!schema.graphql
+
+# YAML/JSON конфиги с секретами
+*.secret.yaml
+*.secret.json
+
+# .NET Global tool
+.dotnet-tools.json
+.dotnet-tools/
+
+# Публикация
+/publish/
+/published/
+*.deploy
+*.pubxml
+*.pubxml.user
+*.pubxml.user
+
+# Пользовательские файлы ReSharper
+*.DotSettings.user
+*.DotSettings
+_ReSharper.Caches/
+resharper/
+*.sln.resharper
+*.sln.DotSettings
+*.sln.DotSettings.user
+*.csproj.DotSettings
+*.vbproj.DotSettings
+*.fsproj.DotSettings
+
+# Файлы бэкапов Visual Studio
+*.vbx
+*.obj
+*.ilk
+*.meta
+*.idb
+*.pdb
+*.bsc
+*.map
+*.exp
+
+# MinGW / Cygwin
+*.exe.stackdump
+
+# Azure Functions
+.local/
+bin/
+obj/
+*.vscode/
+*.secrets/
+*.secrets.*
+*.secrets.*.json
+
+# Бинарные файлы RabbitMQ
+*.rabbitmq
+*.erlang.cookie
+
+# Terraform (если используется для инфраструктуры)
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform/
+terraform.tfplan
+terraform.plan
+
+# Файлы для Kubernetes (если используются secrets)
+*.secret.yml
+*.secret.yaml
+secrets/
+*.secrets
+
+# Файлы для Helm (secrets)
+*.secret.tpl
+*.secret.yaml
+secrets.yaml
