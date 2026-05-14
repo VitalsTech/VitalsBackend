@@ -23,6 +23,7 @@ namespace UserService.Domain.Entities
         public PatientProfile? PatientProfile { get; set; }
         public DoctorProfile? DoctorProfile { get; set; }
         public OrganizationProfile? OrganizationProfile { get; set; }
+        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     }
 
     public enum ProfileType

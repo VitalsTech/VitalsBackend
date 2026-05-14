@@ -38,6 +38,7 @@ namespace UserService.Domain.Entities
         public string? BlockReason { get; set; }
 
         public ICollection<Profile> Profiles { get; set; } = new List<Profile>();
+        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 
         public void UpdateTimestamp()
         {

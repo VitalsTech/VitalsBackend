@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres-user:
     image: postgres:15
@@ -20,22 +18,7 @@ services:
     networks:
       - vitals-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: vitals-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - vitals-network
-
-  userservice:
+  userservice.api:
     build:
       context: .
       dockerfile: UserService.API/Dockerfile
@@ -51,14 +34,11 @@ services:
     depends_on:
       postgres-user:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - vitals-network
 
 volumes:
   postgres-user-data:
-  redis-data:
 
 networks:
   vitals-network:

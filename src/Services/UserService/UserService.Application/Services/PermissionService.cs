@@ -1,7 +1,5 @@
-﻿using AutoMapper;
-using UserService.Application.DTOs.Common;
+﻿using UserService.Application.DTOs.Common;
 using UserService.Application.Interfaces;
-using UserService.Domain.Entities;
 using UserService.Domain.Interfaces;
 
 namespace UserService.Application.Services
@@ -9,14 +7,17 @@ namespace UserService.Application.Services
     public class PermissionService : IPermissionService
     {
         private readonly IUserRepository _userRepository;
-        private readonly IMultiProfileUserService _multiProfileUserService;
+        private readonly IUserRoleRepository _userRoleRepository;
+        private readonly IPermissionRepository _permissionRepository;
 
         public PermissionService(
             IUserRepository userRepository,
-            IMultiProfileUserService multiProfileUserService)
+            IUserRoleRepository userRoleRepository,
+            IPermissionRepository permissionRepository)
         {
             _userRepository = userRepository;
-            _multiProfileUserService = multiProfileUserService;
+            _userRoleRepository = userRoleRepository;
+            _permissionRepository = permissionRepository;
         }
 
         public async Task<UserRoleResponse> GetUserRolesAndPermissionsAsync(Guid publicId)
@@ -25,33 +26,33 @@ namespace UserService.Application.Services
             if (user == null)
                 return new UserRoleResponse { UserPublicId = publicId };
 
-            var profiles = await _multiProfileUserService.GetUserProfilesAsync(publicId);
-            var activeProfile = profiles.FirstOrDefault(p => p.IsActive);
+            // Получаем все профили пользователя
+            var profiles = await _userRepository.GetProfilesByUserAsync(user.Id);
+            
+            if (!profiles.Any())
+                return new UserRoleResponse { UserPublicId = publicId };
 
-            if (activeProfile == null)
+            var rolesList = new List<string>();
+            var permissionsList = new List<string>();
+
+            foreach (var profile in profiles)
             {
-                return new UserRoleResponse
-                {
-                    UserPublicId = publicId,
-                    Roles = new List<string>(),
-                    Permissions = new List<string>()
-                };
-            }
+                // Получаем роли для каждого профиля
+                var roles = await _userRoleRepository.GetRolesByProfileAsync(profile.Id);
+                var roleNames = roles.Select(r => r.Name);
+                rolesList.AddRange(roleNames);
 
-            var roles = new List<string> { activeProfile.ProfileType };
-            var permissions = GetPermissionsForProfileType(activeProfile.ProfileType);
-
-            if (user.Email == "admin@vitals.com")
-            {
-                roles.Add("Admin");
-                permissions.AddRange(GetAdminPermissions());
+                // Получаем права для ролей этого профиля
+                var permissions = await _permissionRepository.GetPermissionsByProfileAsync(profile.Id);
+                var permissionNames = permissions.Select(p => p.Name);
+                permissionsList.AddRange(permissionNames);
             }
 
             return new UserRoleResponse
             {
                 UserPublicId = publicId,
-                Roles = roles,
-                Permissions = permissions.Distinct().ToList()
+                Roles = rolesList.Distinct().ToList(),
+                Permissions = permissionsList.Distinct().ToList()
             };
         }
 
@@ -61,17 +62,14 @@ namespace UserService.Application.Services
             if (user == null)
                 return false;
 
-            var profiles = await _multiProfileUserService.GetUserProfilesAsync(publicId);
-            var activeProfile = profiles.FirstOrDefault(p => p.IsActive);
-
-            if (activeProfile == null)
-                return false;
-
-            if (activeProfile.ProfileType.Equals(role, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (role == "Admin" && user.Email == "admin@vitals.com")
-                return true;
+            var profiles = await _userRepository.GetProfilesByUserAsync(user.Id);
+            
+            foreach (var profile in profiles)
+            {
+                var roles = await _userRoleRepository.GetRolesByProfileAsync(profile.Id);
+                if (roles.Any(r => r.Name == role))
+                    return true;
+            }
 
             return false;
         }
@@ -82,24 +80,16 @@ namespace UserService.Application.Services
             if (user == null)
                 return false;
 
+            // Проверка блокировки
             if (!user.IsActive || (user.BlockedUntil.HasValue && user.BlockedUntil.Value > DateTime.UtcNow))
                 return false;
 
-            var profiles = await _multiProfileUserService.GetUserProfilesAsync(publicId);
-            var activeProfile = profiles.FirstOrDefault(p => p.IsActive);
-
-            if (activeProfile == null)
-                return false;
-
-            var permissions = GetPermissionsForProfileType(activeProfile.ProfileType);
-
-            if (permissions.Contains(permission))
-                return true;
-
-            if (user.Email == "admin@vitals.com")
+            var profiles = await _userRepository.GetProfilesByUserAsync(user.Id);
+            
+            foreach (var profile in profiles)
             {
-                var adminPermissions = GetAdminPermissions();
-                if (adminPermissions.Contains(permission))
+                var permissions = await _permissionRepository.GetPermissionsByProfileAsync(profile.Id);
+                if (permissions.Any(p => p.Name == permission))
                     return true;
             }
 
@@ -123,66 +113,6 @@ namespace UserService.Application.Services
             {
                 HasPermission = false,
                 Reason = reason
-            };
-        }
-
-        private List<string> GetPermissionsForProfileType(string profileType)
-        {
-            return profileType switch
-            {
-                "Patient" => new List<string>
-                {
-                    "profile.view.self",
-                    "profile.edit.self",
-                    "medical.history.view",
-                    "prescription.view",
-                    "prescription.fill",
-                    "consultation.start",
-                    "consultation.join",
-                    "lab.order.view",
-                    "lab.result.view"
-                },
-                "Doctor" => new List<string>
-                {
-                    "profile.view.self",
-                    "profile.edit.self",
-                    "profile.view.patient",
-                    "medical.history.view.all",
-                    "prescription.create",
-                    "prescription.view.all",
-                    "prescription.cancel",
-                    "consultation.start",
-                    "consultation.join",
-                    "consultation.end",
-                    "lab.order.create",
-                    "lab.result.view",
-                    "certificate.view",
-                    "certificate.update"
-                },
-                "Organization" => new List<string>
-                {
-                    "profile.view.self",
-                    "profile.edit.self",
-                    "org.doctors.manage",
-                    "org.schedule.manage",
-                    "org.patients.view",
-                    "org.finance.view",
-                    "org.reports.generate",
-                    "integration.settings.manage"
-                },
-                _ => new List<string>()
-            };
-        }
-
-        private List<string> GetAdminPermissions()
-        {
-            return new List<string>
-            {
-                "users.view.all",
-                "users.block",
-                "users.delete",
-                "audit.log.view",
-                "system.settings.manage"
             };
         }
     }
