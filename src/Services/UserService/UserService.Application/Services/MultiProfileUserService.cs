@@ -9,6 +9,7 @@ using UserService.Application.Interfaces;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Interfaces;
+using FluentValidation;
 using Profile = UserService.Domain.Entities.Profile;
 
 namespace UserService.Application.Services
@@ -46,6 +47,8 @@ namespace UserService.Application.Services
             // Проверка уникальности телефона
             if (!await _userRepository.IsPhoneUniqueAsync(request.PhoneNumber))
                 throw new DuplicatePhoneException($"Phone {request.PhoneNumber} already exists");
+            if (!string.IsNullOrEmpty(request.Email) && !await _userRepository.IsEmailUniqueAsync(request.Email))
+                throw new DuplicateEmailException($"Email {request.Email} already exists");
 
             // Создание пользователя
             var user = new User
@@ -236,6 +239,10 @@ namespace UserService.Application.Services
 
         private async Task<Profile> CreateDoctorProfile(Guid userId, CreateDoctorProfileRequest request)
         {
+            if (!Enum.TryParse<DoctorCategory>(request.Category, true, out var category))
+            {
+                throw new ValidationException($"Invalid category value. Allowed values: None, Second, First, Highest. Received: {request.Category}");
+            }
             var profile = new Profile
             {
                 UserId = userId,

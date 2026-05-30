@@ -21,19 +21,8 @@ namespace UserService.API.Controllers
         [HttpPost("register")]
         public async Task<ActionResult<UserWithProfilesDto>> Register(CreateUserWithProfileRequest request)
         {
-            try
-            {
-                var result = await _multiProfileUserService.CreateUserWithProfileAsync(request);
-                return Ok(result);
-            }
-            catch (DuplicatePhoneException ex)
-            {
-                return Conflict(new { error = ex.Message });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
+            var result = await _multiProfileUserService.CreateUserWithProfileAsync(request);
+            return Ok(result);
         }
 
         [HttpGet("{publicId:guid}")]

@@ -39,7 +39,8 @@ namespace UserService.Infrastructure.Repositories
             IQueryable<User> query = _context.Users;
             if (filter != null)
                 query = query.Where(filter);
-            return await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+            var skip = Math.Max(page, 0) * pageSize;
+            return await query.Skip(skip).Take(pageSize).ToListAsync();
         }
 
         public async Task<int> CountAsync(Expression<Func<User, bool>>? filter = null)

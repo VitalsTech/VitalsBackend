@@ -1,8 +1,12 @@
 using UserService.Application.Interfaces;
 using UserService.Application.Mappings;
 using UserService.Application.Services;
+using UserService.API.Middleware;
+using UserService.API.Validators;
 using UserService.Infrastructure;
 using UserService.Infrastructure.Data;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace UserService.API
@@ -21,6 +25,8 @@ namespace UserService.API
 
             // Add Infrastructure (DbContext, Repositories)
             builder.Services.AddInfrastructure(builder.Configuration);
+            builder.Services.AddFluentValidationAutoValidation();
+            builder.Services.AddValidatorsFromAssemblyContaining<CreateUserWithProfileRequestValidator>();
 
             // Add Application Services
             builder.Services.AddScoped<IEncryptionService, EncryptionService>();
@@ -53,6 +59,7 @@ namespace UserService.API
 
             app.UseHttpsRedirection();
             app.UseAuthorization();
+            app.UseMiddleware<GlobalExceptionHandler>();
             app.MapControllers();
 
             app.Run();
