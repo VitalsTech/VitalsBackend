@@ -12,7 +12,7 @@ namespace UserService.API.Validators
 
             RuleFor(x => x.ProfileType)
                 .NotEmpty().WithMessage("ProfileType is required")
-                .Must(type => type == "Patient" || type == "Doctor" || type == "Organization")
+                .Must(type => IsProfileType(type, "Patient") || IsProfileType(type, "Doctor") || IsProfileType(type, "Organization"))
                 .WithMessage("ProfileType must be 'Patient', 'Doctor', or 'Organization'");
 
             // Валидация профилей (только один)
@@ -22,15 +22,27 @@ namespace UserService.API.Validators
                            (x.OrganizationProfile != null ? 1 : 0) == 1)
                 .WithMessage("Exactly one profile must be provided");
 
+            RuleFor(x => x)
+                .Must(ProfileDataMatchesType)
+                .WithMessage("Profile data must match ProfileType");
+
             When(x => x.PatientProfile != null, () => {
-                RuleFor(x => x.PatientProfile).SetValidator(new CreatePatientProfileRequestValidator());
+                RuleFor(x => x.PatientProfile!).SetValidator(new CreatePatientProfileRequestValidator());
             });
             When(x => x.DoctorProfile != null, () => {
-                RuleFor(x => x.DoctorProfile).SetValidator(new CreateDoctorProfileRequestValidator());
+                RuleFor(x => x.DoctorProfile!).SetValidator(new CreateDoctorProfileRequestValidator());
             });
             When(x => x.OrganizationProfile != null, () => {
-                RuleFor(x => x.OrganizationProfile).SetValidator(new CreateOrganizationProfileRequestValidator());
+                RuleFor(x => x.OrganizationProfile!).SetValidator(new CreateOrganizationProfileRequestValidator());
             });
         }
+
+        private static bool IsProfileType(string? value, string expected)
+            => string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
+
+        private static bool ProfileDataMatchesType(AddProfileToExistingUserRequest request)
+            => (IsProfileType(request.ProfileType, "Patient") && request.PatientProfile != null) ||
+               (IsProfileType(request.ProfileType, "Doctor") && request.DoctorProfile != null) ||
+               (IsProfileType(request.ProfileType, "Organization") && request.OrganizationProfile != null);
     }
 }

@@ -132,7 +132,10 @@ namespace UserService.Application.Services
             if (user == null)
                 throw new UserNotFoundException($"User with ID {request.UserPublicId} not found");
 
-            var profileType = Enum.Parse<ProfileType>(request.ProfileType);
+            if (!Enum.TryParse<ProfileType>(request.ProfileType, true, out var profileType))
+            {
+                throw new ValidationException($"Invalid profile type value. Allowed values: Patient, Doctor, Organization. Received: {request.ProfileType}");
+            }
 
             var existingProfile = await _userRepository.GetProfileByUserAndTypeAsync(user.Id, profileType);
             if (existingProfile != null)
@@ -140,14 +143,13 @@ namespace UserService.Application.Services
 
             Profile profile = null!;
 
-            if (request.PatientProfile != null)
-                profile = await CreatePatientProfile(user.Id, request.PatientProfile);
-            else if (request.DoctorProfile != null)
-                profile = await CreateDoctorProfile(user.Id, request.DoctorProfile);
-            else if (request.OrganizationProfile != null)
-                profile = await CreateOrganizationProfile(user.Id, request.OrganizationProfile);
-            else
-                throw new ArgumentException("Profile data must be provided");
+            profile = profileType switch
+            {
+                ProfileType.Patient when request.PatientProfile != null => await CreatePatientProfile(user.Id, request.PatientProfile),
+                ProfileType.Doctor when request.DoctorProfile != null => await CreateDoctorProfile(user.Id, request.DoctorProfile),
+                ProfileType.Organization when request.OrganizationProfile != null => await CreateOrganizationProfile(user.Id, request.OrganizationProfile),
+                _ => throw new ValidationException($"{profileType} profile data must be provided")
+            };
 
             await _userRepository.AddProfileAsync(profile);
             await _userRepository.SaveChangesAsync();
@@ -224,7 +226,7 @@ namespace UserService.Application.Services
             var patientProfile = new PatientProfile
             {
                 Id = profile.Id,
-                BloodType = string.IsNullOrEmpty(request.BloodType) ? null : Enum.Parse<BloodType>(request.BloodType),
+                BloodType = ParseOptionalEnum<BloodType>(request.BloodType, "blood type"),
                 Allergies = request.Allergies
             };
 
@@ -258,7 +260,7 @@ namespace UserService.Application.Services
                 CertificateNumber = request.CertificateNumber,
                 CertificateExpiryDate = request.CertificateExpiryDate,
                 OrganizationId = request.OrganizationId,
-                Category = Enum.Parse<DoctorCategory>(request.Category),
+                Category = category,
                 AcademicDegree = request.AcademicDegree,
                 Biography = request.Biography
             };
@@ -283,7 +285,7 @@ namespace UserService.Application.Services
                 INN = request.INN,
                 KPP = request.KPP,
                 OGRN = request.OGRN,
-                Role = Enum.Parse<OrganizationRole>(request.Role),
+                Role = ParseRequiredEnum<OrganizationRole>(request.Role, "role"),
                 ContactPhone = request.ContactPhone,
                 ContactEmail = request.ContactEmail,
                 AdministratorId = request.AdministratorId
@@ -306,6 +308,25 @@ namespace UserService.Application.Services
 
             profile.OrganizationProfile = orgProfile;
             return profile;
+        }
+
+        private static TEnum ParseRequiredEnum<TEnum>(string value, string fieldName)
+            where TEnum : struct, Enum
+        {
+            if (Enum.TryParse<TEnum>(value, true, out var parsed))
+                return parsed;
+
+            var allowedValues = string.Join(", ", Enum.GetNames<TEnum>());
+            throw new ValidationException($"Invalid {fieldName} value. Allowed values: {allowedValues}. Received: {value}");
+        }
+
+        private static TEnum? ParseOptionalEnum<TEnum>(string? value, string fieldName)
+            where TEnum : struct, Enum
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            return ParseRequiredEnum<TEnum>(value, fieldName);
         }
 
         private object GetProfileData(Profile profile)
