@@ -8,7 +8,8 @@ namespace UserService.API.Validators
         public UserBlockRequestValidator()
         {
             RuleFor(x => x.BlockedUntil)
-                .GreaterThan(DateTime.UtcNow).WithMessage("BlockedUntil must be in the future")
+                .Must(blockedUntil => !blockedUntil.HasValue || blockedUntil.Value > DateTime.UtcNow)
+                .WithMessage("BlockedUntil must be in the future")
                 .When(x => x.BlockedUntil.HasValue);
         }
     }

@@ -23,7 +23,7 @@ namespace UserService.Application.Services
         public async Task<UserRoleResponse> GetUserRolesAndPermissionsAsync(Guid publicId)
         {
             var user = await _userRepository.GetByPublicIdAsync(publicId);
-            if (user == null)
+            if (user == null || IsBlockedOrInactive(user))
                 return new UserRoleResponse { UserPublicId = publicId };
 
             // Получаем все профили пользователя
@@ -59,7 +59,7 @@ namespace UserService.Application.Services
         public async Task<bool> HasRoleAsync(Guid publicId, string role)
         {
             var user = await _userRepository.GetByPublicIdAsync(publicId);
-            if (user == null)
+            if (user == null || IsBlockedOrInactive(user))
                 return false;
 
             var profiles = await _userRepository.GetProfilesByUserAsync(user.Id);
@@ -81,7 +81,7 @@ namespace UserService.Application.Services
                 return false;
 
             // Проверка блокировки
-            if (!user.IsActive || (user.BlockedUntil.HasValue && user.BlockedUntil.Value > DateTime.UtcNow))
+            if (IsBlockedOrInactive(user))
                 return false;
 
             var profiles = await _userRepository.GetProfilesByUserAsync(user.Id);
@@ -106,7 +106,7 @@ namespace UserService.Application.Services
             var user = await _userRepository.GetByPublicIdAsync(request.UserPublicId);
             string reason = "User does not have required permission";
 
-            if (user != null && (!user.IsActive || (user.BlockedUntil.HasValue && user.BlockedUntil.Value > DateTime.UtcNow)))
+            if (user != null && IsBlockedOrInactive(user))
                 reason = "User is blocked or inactive";
 
             return new PermissionCheckResponse
@@ -115,5 +115,8 @@ namespace UserService.Application.Services
                 Reason = reason
             };
         }
+
+        private static bool IsBlockedOrInactive(UserService.Domain.Entities.User user)
+            => !user.IsActive || (user.BlockedUntil.HasValue && user.BlockedUntil.Value > DateTime.UtcNow);
     }
 }
