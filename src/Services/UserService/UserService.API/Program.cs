@@ -2,6 +2,7 @@ using UserService.Application.Interfaces;
 using UserService.Application.Mappings;
 using UserService.Application.Services;
 using UserService.API.Middleware;
+using UserService.API.Swagger;
 using UserService.API.Validators;
 using UserService.Infrastructure;
 using UserService.Infrastructure.Data;
@@ -21,7 +22,11 @@ namespace UserService.API
             // Add services
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.SchemaFilter<ValidationSchemaFilter>();
+                options.OperationFilter<RequestExampleOperationFilter>();
+            });
 
             // Add Infrastructure (DbContext, Repositories)
             builder.Services.AddInfrastructure(builder.Configuration);
