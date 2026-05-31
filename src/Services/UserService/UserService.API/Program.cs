@@ -8,6 +8,7 @@ using UserService.Infrastructure;
 using UserService.Infrastructure.Data;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using MicroElements.Swashbuckle.FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace UserService.API
@@ -32,6 +33,7 @@ namespace UserService.API
             builder.Services.AddInfrastructure(builder.Configuration);
             builder.Services.AddFluentValidationAutoValidation();
             builder.Services.AddValidatorsFromAssemblyContaining<CreateUserWithProfileRequestValidator>();
+            builder.Services.AddFluentValidationRulesToSwagger();
 
             // Add Application Services
             builder.Services.AddScoped<IEncryptionService, EncryptionService>();
