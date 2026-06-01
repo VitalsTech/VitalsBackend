@@ -25,17 +25,26 @@ namespace UserService.API.Controllers
         [HttpGet("users/by-phone/{phone}")]
         public async Task<ActionResult<UserWithProfilesDto>> GetUserByPhone(string phone)
         {
-            // Нужно добавить метод GetByPhoneAsync в IMultiProfileUserService
-            // Пока используем прямой поиск через репозиторий
-            // Для простоты можно временно оставить только проверку существования
-            return Ok(new { phone, message = "Method to be implemented" });
+            var user = await _multiProfileUserService.GetUserByPhoneAsync(phone);
+            if (user is null)
+                return NotFound();
+            return Ok(user);
         }
 
-        // Получение пользователя по email
         [HttpGet("users/by-email/{email}")]
         public async Task<ActionResult<UserWithProfilesDto>> GetUserByEmail(string email)
         {
-            return Ok(new { email, message = "Method to be implemented" });
+            var user = await _multiProfileUserService.GetUserByEmailAsync(email);
+            if (user is null)
+                return NotFound();
+            return Ok(user);
+        }
+
+        [HttpGet("users/{publicId:guid}/roles-permissions")]
+        public async Task<ActionResult<UserRoleResponse>> GetRolesAndPermissions(Guid publicId)
+        {
+            var result = await _permissionService.GetUserRolesAndPermissionsAsync(publicId);
+            return Ok(result);
         }
 
         // Проверка наличия права у пользователя

@@ -1,0 +1,44 @@
+services:
+  postgres-auth:
+    image: postgres:15
+    container_name: vitals-postgres-auth
+    environment:
+      POSTGRES_DB: AuthServiceDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vitals-network
+
+  authservice.api:
+    build:
+      context: .
+      dockerfile: AuthService.API/Dockerfile
+    container_name: vitals-authservice
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres-auth;Port=5432;Database=AuthServiceDb;Username=postgres;Password=postgres123
+      - UserService__BaseUrl=http://userservice.api:80
+    ports:
+      - "5002:80"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    networks:
+      - vitals-network
+
+volumes:
+  postgres-auth-data:
+
+networks:
+  vitals-network:
+    driver: bridge
