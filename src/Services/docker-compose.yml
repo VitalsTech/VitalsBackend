@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # ========== БАЗЫ ДАННЫХ ==========
+  postgres-auth:
+    image: postgres:15
+    container_name: vitals-postgres-auth
+    environment:
+      POSTGRES_DB: AuthServiceDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vitals-network
+
+  postgres-user:
+    image: postgres:15
+    container_name: vitals-postgres-user
+    environment:
+      POSTGRES_DB: UserServiceDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-user-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vitals-network
+
+  postgres-medical:
+    image: postgres:15
+    container_name: vitals-postgres-medical
+    environment:
+      POSTGRES_DB: MedicalRecordDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-medical-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vitals-network
+
+  # ========== МИКРОСЕРВИСЫ ==========
+  authservice.api:
+    build:
+      context: ./AuthService
+      dockerfile: AuthService.API/Dockerfile
+    container_name: vitals-authservice
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres-auth;Port=5432;Database=AuthServiceDb;Username=postgres;Password=postgres123
+    ports:
+      - "5002:80"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    networks:
+      - vitals-network
+
+  userservice.api:
+    build:
+      context: ./UserService
+      dockerfile: UserService.API/Dockerfile
+    container_name: vitals-userservice
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres-user;Port=5432;Database=UserServiceDb;Username=postgres;Password=postgres123
+    ports:
+      - "5001:80"
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+    networks:
+      - vitals-network
+
+  medicalrecordservice.api:
+    build:
+      context: ./MedicalRecordService
+      dockerfile: MedicalRecordService.API/Dockerfile
+    container_name: vitals-medical-record
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres-medical;Port=5432;Database=MedicalRecordDb;Username=postgres;Password=postgres123
+    ports:
+      - "5003:80"
+    depends_on:
+      postgres-medical:
+        condition: service_healthy
+    networks:
+      - vitals-network
+
+volumes:
+  postgres-auth-data:
+  postgres-user-data:
+  postgres-medical-data:
+
+networks:
+  vitals-network:
+    driver: bridge

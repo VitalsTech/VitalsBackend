@@ -2,7 +2,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 EXPOSE 80
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS publish
 WORKDIR /src
 COPY ["MedicalRecordService.API/MedicalRecordService.API.csproj", "MedicalRecordService.API/"]
 COPY ["MedicalRecordService.Application/MedicalRecordService.Application.csproj", "MedicalRecordService.Application/"]
