@@ -1,0 +1,27 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MedicalRecordService.Domain", "MedicalRecordService.Domain\MedicalRecordService.Domain.csproj", "{C1D2E3F4-A5B6-4789-CDEF-012345678901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MedicalRecordService.Application", "MedicalRecordService.Application\MedicalRecordService.Application.csproj", "{C2D2E3F4-A5B6-4789-CDEF-012345678901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MedicalRecordService.Infrastructure", "MedicalRecordService.Infrastructure\MedicalRecordService.Infrastructure.csproj", "{C3D2E3F4-A5B6-4789-CDEF-012345678901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MedicalRecordService.API", "MedicalRecordService.API\MedicalRecordService.API.csproj", "{C4D2E3F4-A5B6-4789-CDEF-012345678901}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C1D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4D2E3F4-A5B6-4789-CDEF-012345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+EndGlobal
