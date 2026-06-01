@@ -1,0 +1,10 @@
+using AuthService.Application.DTOs;
+
+namespace AuthService.Application.Interfaces;
+
+public interface IJwtTokenService
+{
+    string CreateAccessToken(Guid userPublicId, IEnumerable<string> roles, IEnumerable<string> scopes);
+    ValidateTokenResponse ValidateAccessToken(string token);
+    string GetJwksJson();
+}
