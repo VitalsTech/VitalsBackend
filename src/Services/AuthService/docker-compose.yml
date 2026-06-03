@@ -24,10 +24,9 @@ services:
       dockerfile: AuthService.API/Dockerfile
     container_name: vitals-authservice
     environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
       - ConnectionStrings__DefaultConnection=Host=postgres-auth;Port=5432;Database=AuthServiceDb;Username=postgres;Password=postgres123
-      - UserService__BaseUrl=http://userservice.api:80
     ports:
       - "5002:80"
     depends_on:
