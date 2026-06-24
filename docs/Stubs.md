@@ -8,7 +8,6 @@
 
 | Сервис / функция | Где видно | Поведение сейчас |
 | --- | --- | --- |
-| **Consultation Service** | `ApiGateway` → `/api/v1/consultations/*` | HTTP 501 |
 | **Doctor search / schedule** | `ApiGateway` → `/api/v1/doctors/*` | HTTP 501 |
 | **Prescription Service** | `ApiGateway` → `/api/v1/prescriptions/*` | HTTP 501 |
 | **Notification Service** | — | Не реализован (ожидает события `auto_response_required`, уведомления пациентам) |
@@ -23,7 +22,7 @@
 
 | Заглушка | Класс / файл | Описание | Как заменить |
 | --- | --- | --- | --- |
-| Неподключённые backend-ы | `ConsultationsController`, `DoctorsController`, `PrescriptionsController` | Любой запрос → **501** с текстом «not connected yet» | YARP-маршруты + запущенные сервисы |
+| Неподключённые backend-ы | `DoctorsController`, `PrescriptionsController` | Любой запрос → **501** |
 | Routing Service не в Gateway | `appsettings.json` (YARP) | `/api/v1/routing/*` отсутствует; Routing — только internal HTTP :5230 | Добавить reverse proxy (если нужен публичный доступ) |
 | Ephemeral JWT key (dev) | `JwtSigningKeyProvider` | Если JWKS недоступен в **Development**, генерируется временный RSA-ключ | Запускать AuthService; задать `Jwt:JwksUrl` или `Jwt:RsaPublicKeyPem` |
 | Redis для rate limit | `RedisSlidingWindowRateLimitStore` | Работает только при доступном Redis (`localhost:6379`); без Redis — ошибка при старте | `docker run -p 6379:6379 redis:7-alpine` или docker-compose Gateway |
@@ -89,6 +88,19 @@
 
 ---
 
+## ConsultationService
+
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
+| --- | --- | --- | --- |
+| Kafka consumer | `RoutingDecisionConsumerHostedService` | `routing.decision` не слушается; создание через **POST /internal/consultations/routing-decision** | `Kafka:Enabled: false` |
+| Kafka publisher | `LoggingConsultationEventPublisher` | `consultation.created`, `consultation.completed`, … → **лог** | `Kafka:Enabled: false` |
+| SFU / WebRTC | `StubSfuSignalingService` | Возвращает fake room/token, **без медиапотоков** | `Sfu:UseStub: true` |
+| Redis hot state | `InMemorySessionStateStore` | Статус/unread **логируются**, персистентность в PostgreSQL | `Redis:Enabled: false` |
+| Напоминания push/SMS | — | Только `SessionTimeoutHostedService` (expire scan) | — |
+| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+
+---
+
 ## Межсервисные разрывы (интеграции-«заглушки»)
 
 Связи, которые в архитектуре описаны через Kafka/HTTP, но **сейчас не замкнуты автоматически**:
@@ -96,7 +108,9 @@
 | Поток | Ожидание | Сейчас |
 | --- | --- | --- |
 | AI Triage → Routing | `triage.completed` (Kafka) | Triage **логирует** событие; Routing принимает **ручной POST** на internal API |
-| Routing → Consultation | `routing.decision` (Kafka) | Consultation Service **не существует** |
+| Routing → Consultation | `routing.decision` (Kafka) | Routing **логирует**; Consultation принимает **POST /internal/consultations/routing-decision** |
+| Consultation → Medical Record | HTTP append events | **Работает**; при ошибке MR — warning в лог |
+| Consultation → Notification | `consultation.created` | Notification Service **не существует** |
 | Routing → Integration | `lab.order_required`, `emergency_required` | Integration Service **не существует** |
 | Routing → Notification | `auto_response_required` | Notification Service **не существует** |
 | Routing / Triage → Medical Record | HTTP контекст пациента | **Работает** (`GET internal/medical-records/patients/{id}/state`); при недоступности MR — routing/triage продолжают с `null` контекстом |
@@ -107,7 +121,7 @@
 
 | Где | Что происходит |
 | --- | --- |
-| AITriageService, RoutingService, MedicalRecordService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
+| AITriageService, RoutingService, MedicalRecordService, ConsultationService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
 | ApiGateway | Временный RSA-ключ, если AuthService не запущен (Development) |
 | AuthService | RSA-ключ для подписи JWT генерируется при старте, если PEM не задан |
 | AuthService | Код восстановления пароля пишется в лог приложения |
@@ -149,3 +163,4 @@ Auth:
 - [MedicalRecordService](MedicalRecordService.md) — Kafka
 - [AITriageService](AITriageService.md) — NER/LLM/Kafka
 - [RoutingService](RoutingService.md) — scheduler, Kafka, Redis
+- [ConsultationService](ConsultationService.md) — SFU, SignalR, Kafka
