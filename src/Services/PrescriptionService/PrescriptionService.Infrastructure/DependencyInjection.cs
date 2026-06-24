@@ -49,8 +49,24 @@ public static class DependencyInjection
         services.AddSingleton<IESignatureService, PrescriptionESignatureAdapter>();
         services.AddHostedService<PrescriptionExpiryHostedService>();
 
-        services.AddHttpClient<IMedicalRecordContextClient, MedicalRecordContextClient>();
-        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>();
+        services.AddHttpClient<IMedicalRecordContextClient, MedicalRecordContextClient>(client =>
+        {
+            var apiKey = configuration["ServiceAuth:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("X-Service-Key", apiKey);
+                client.DefaultRequestHeaders.Add("X-Service-Name", "prescription-service");
+            }
+        });
+        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>(client =>
+        {
+            var apiKey = configuration["ServiceAuth:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("X-Service-Key", apiKey);
+                client.DefaultRequestHeaders.Add("X-Service-Name", "prescription-service");
+            }
+        });
         services.AddHttpClient<IEgiszClient, IntegrationEgiszClient>((sp, client) =>
         {
             var integration = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<IntegrationServiceOptions>>().Value;

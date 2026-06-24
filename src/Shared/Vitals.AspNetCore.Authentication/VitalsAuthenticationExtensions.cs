@@ -223,12 +223,21 @@ public sealed class InternalServiceAuthMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (context.Request.Path.StartsWithSegments("/internal") &&
-            context.User.Identity?.IsAuthenticated != true)
+        if (context.Request.Path.StartsWithSegments("/internal"))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new { error = "Internal endpoints require service authentication." });
-            return;
+            if (context.User.Identity?.IsAuthenticated != true)
+            {
+                var result = await context.AuthenticateAsync(VitalsAuthenticationExtensions.ServiceKeyScheme);
+                if (result.Succeeded && result.Principal is not null)
+                    context.User = result.Principal;
+            }
+
+            if (context.User.Identity?.IsAuthenticated != true)
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(new { error = "Internal endpoints require service authentication." });
+                return;
+            }
         }
 
         await _next(context);

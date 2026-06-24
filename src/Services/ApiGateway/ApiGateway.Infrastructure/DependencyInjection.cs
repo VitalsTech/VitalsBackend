@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<BackendServicesOptions>(configuration.GetSection(BackendServicesOptions.SectionName));
         services.Configure<RateLimitingOptions>(configuration.GetSection(RateLimitingOptions.SectionName));
+        services.Configure<ServiceAuthOptions>(configuration.GetSection(ServiceAuthOptions.SectionName));
 
         var servicesOptions = configuration.GetSection(BackendServicesOptions.SectionName).Get<BackendServicesOptions>()
             ?? new BackendServicesOptions();

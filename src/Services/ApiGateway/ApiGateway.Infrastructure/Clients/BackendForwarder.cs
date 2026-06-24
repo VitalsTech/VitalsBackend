@@ -10,8 +10,13 @@ namespace ApiGateway.Infrastructure.Clients;
 public sealed class BackendForwarder : IBackendForwarder
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ServiceAuthOptions _serviceAuth;
 
-    public BackendForwarder(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
+    public BackendForwarder(IHttpClientFactory httpClientFactory, IOptions<ServiceAuthOptions> serviceAuth)
+    {
+        _httpClientFactory = httpClientFactory;
+        _serviceAuth = serviceAuth.Value;
+    }
 
     public Task<HttpResponseMessage> ForwardJsonAsync(
         string serviceName,
@@ -43,8 +48,14 @@ public sealed class BackendForwarder : IBackendForwarder
         return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
     }
 
-    private static void CopyRequestHeaders(BackendForwardContext context, HttpRequestMessage request)
+    private void CopyRequestHeaders(BackendForwardContext context, HttpRequestMessage request)
     {
+        if (!string.IsNullOrWhiteSpace(_serviceAuth.ApiKey))
+        {
+            request.Headers.TryAddWithoutValidation("X-Service-Key", _serviceAuth.ApiKey);
+            request.Headers.TryAddWithoutValidation("X-Service-Name", _serviceAuth.ServiceName);
+        }
+
         if (!string.IsNullOrWhiteSpace(context.Authorization))
             request.Headers.TryAddWithoutValidation("Authorization", context.Authorization);
 

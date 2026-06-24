@@ -1,0 +1,590 @@
+{
+  "info": {
+    "name": "Vitals — Полный цикл пациента",
+    "_postman_id": "b1a7c0de-0000-4000-8000-vitalsfullflow",
+    "description": "Сквозной сценарий через API Gateway (http://localhost:5080):\nрегистрация -> логин -> симптомы/триаж -> подбор врача -> консультация -> рецепт -> выздоровление.\n\nТокены и идентификаторы сохраняются автоматически в переменные коллекции тест-скриптами, поэтому запросы нужно выполнять сверху вниз (или прогнать всю коллекцию через Runner).\n\nДоктор-специфичные действия (завершение консультации, выписка/подписание рецепта) используют отдельный токен {{doctorToken}}. Консультация создаётся на залогиненного врача ({{doctorUserId}} из шага логина врача), поэтому join/complete от его имени проходят. Событие выздоровления пишется под токеном пациента (он сам себе разрешает запись в свою медкарту).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{patientToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5080" },
+    { "key": "patientPhone", "value": "" },
+    { "key": "patientPassword", "value": "Passw0rd!23" },
+    { "key": "doctorPhone", "value": "" },
+    { "key": "doctorPassword", "value": "Passw0rd!23" },
+    { "key": "patientToken", "value": "" },
+    { "key": "doctorToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "patientUserId", "value": "" },
+    { "key": "doctorUserId", "value": "" },
+    { "key": "searchDoctorId", "value": "" },
+    { "key": "triageSessionId", "value": "" },
+    { "key": "routingDecisionId", "value": "" },
+    { "key": "consultationId", "value": "" },
+    { "key": "prescriptionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Health check",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "1. Аутентификация",
+      "item": [
+        {
+          "name": "Регистрация пациента",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Только цифры, 10-15 знаков (валидатор UserService: ^[0-9]{10,15}$). Без '+'.",
+                  "var phone = '79' + Math.floor(100000000 + Math.random() * 899999999);",
+                  "pm.collectionVariables.set('patientPhone', phone);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var json = pm.response.json();",
+                  "if (json.accessToken) { pm.collectionVariables.set('patientToken', json.accessToken); }",
+                  "if (json.refreshToken) { pm.collectionVariables.set('refreshToken', json.refreshToken); }",
+                  "if (json.userPublicId) { pm.collectionVariables.set('patientUserId', json.userPublicId); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{patientPhone}}\",\n  \"password\": \"{{patientPassword}}\",\n  \"email\": \"patient@example.com\",\n  \"firstName\": \"Иван\",\n  \"secondName\": \"Иванович\",\n  \"surename\": \"Иванов\",\n  \"birthDate\": \"1990-05-15T00:00:00Z\",\n  \"sex\": \"Male\",\n  \"patientProfile\": {\n    \"insuranceNumber\": \"1234567890123456\",\n    \"snils\": \"12345678901\",\n    \"bloodType\": \"OPositive\",\n    \"allergies\": \"нет\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"] }
+          }
+        },
+        {
+          "name": "Логин пациента",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.collectionVariables.set('patientToken', json.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "if (json.userPublicId) { pm.collectionVariables.set('patientUserId', json.userPublicId); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{patientPhone}}\",\n  \"password\": \"{{patientPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Регистрация врача (для doctor-шагов)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var phone = '79' + Math.floor(100000000 + Math.random() * 899999999);",
+                  "pm.collectionVariables.set('doctorPhone', phone);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var json = pm.response.json();",
+                  "if (json.accessToken) { pm.collectionVariables.set('doctorToken', json.accessToken); }",
+                  "if (json.userPublicId) { pm.collectionVariables.set('doctorUserId', json.userPublicId); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{doctorPhone}}\",\n  \"password\": \"{{doctorPassword}}\",\n  \"email\": \"doctor@example.com\",\n  \"firstName\": \"Пётр\",\n  \"secondName\": \"Петрович\",\n  \"surename\": \"Петров\",\n  \"birthDate\": \"1980-03-10T00:00:00Z\",\n  \"sex\": \"Male\",\n  \"doctorProfile\": {\n    \"specialization\": \"Therapist\",\n    \"diplomaNumber\": \"DPL-0001\",\n    \"diplomaSeries\": \"AB\",\n    \"certificateNumber\": \"CERT-0001\",\n    \"certificateExpiryDate\": \"2035-12-31T00:00:00Z\",\n    \"category\": \"First\",\n    \"academicDegree\": \"Кандидат медицинских наук\",\n    \"biography\": \"Врач-терапевт, стаж 15 лет\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"] }
+          }
+        },
+        {
+          "name": "Логин врача",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.collectionVariables.set('doctorToken', json.accessToken);",
+                  "if (json.userPublicId) { pm.collectionVariables.set('doctorUserId', json.userPublicId); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{doctorPhone}}\",\n  \"password\": \"{{doctorPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Профиль и подготовка",
+      "item": [
+        {
+          "name": "Текущий пользователь (пациент)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/users/{{patientUserId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "users", "{{patientUserId}}"] }
+          }
+        },
+        {
+          "name": "Настройки уведомлений",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/notifications/preferences", "host": ["{{baseUrl}}"], "path": ["api", "v1", "notifications", "preferences"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Первые симптомы — триаж",
+      "item": [
+        {
+          "name": "Создать сессию триажа",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var json = pm.response.json();",
+                  "var id = json.id || json.sessionId || json.triageSessionId;",
+                  "if (id) { pm.collectionVariables.set('triageSessionId', id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientUserId}}\",\n  \"chiefComplaint\": \"Высокая температура, кашель и боль в горле 2 дня\",\n  \"locale\": \"ru-RU\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/triage/sessions", "host": ["{{baseUrl}}"], "path": ["api", "v1", "triage", "sessions"] }
+          }
+        },
+        {
+          "name": "Описать симптомы (сообщение в триаж)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Температура 38.7, сухой кашель, слабость, насморк. Хронических заболеваний нет.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/triage/sessions/{{triageSessionId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "v1", "triage", "sessions", "{{triageSessionId}}", "messages"] }
+          }
+        },
+        {
+          "name": "Получить результат триажа",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200', function () { pm.response.to.have.status(200); });",
+                  "try {",
+                  "  var json = pm.response.json();",
+                  "  if (json.routingDecisionId) { pm.collectionVariables.set('routingDecisionId', json.routingDecisionId); }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/triage/sessions/{{triageSessionId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "triage", "sessions", "{{triageSessionId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Подбор врача",
+      "item": [
+        {
+          "name": "Поиск врачей (терапевт)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200', function () { pm.response.to.have.status(200); });",
+                  "try {",
+                  "  var json = pm.response.json();",
+                  "  var items = json.items || [];",
+                  "  if (items.length > 0 && items[0].doctorId) {",
+                  "    // Сохраняем найденного врача отдельно, НЕ затирая залогиненного доктора.",
+                  "    // Консультацию создаём на {{doctorUserId}} из логина врача, иначе join/complete вернут 403.",
+                  "    pm.collectionVariables.set('searchDoctorId', items[0].doctorId);",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/doctors?specialization=Therapist&page=0&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "doctors"],
+              "query": [
+                { "key": "specialization", "value": "Therapist" },
+                { "key": "page", "value": "0" },
+                { "key": "pageSize", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Консультация",
+      "item": [
+        {
+          "name": "Создать консультацию",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var json = pm.response.json();",
+                  "var id = json.id || json.sessionId || json.consultationId;",
+                  "if (id) { pm.collectionVariables.set('consultationId', id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientUserId}}\",\n  \"doctorId\": \"{{doctorUserId}}\",\n  \"doctorName\": \"Петров Пётр Петрович\",\n  \"consultationType\": \"SyncChat\",\n  \"primarySymptom\": \"ОРВИ, температура и кашель\",\n  \"urgency\": \"Normal\",\n  \"urgencyLevel\": 3,\n  \"triageSessionId\": \"{{triageSessionId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations"] }
+          }
+        },
+        {
+          "name": "Согласие на обработку данных",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataProcessingConsent\": true,\n  \"videoRecordingConsent\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/consent", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "consent"] }
+          }
+        },
+        {
+          "name": "Пациент присоединяется",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"Patient\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/join", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "join"] }
+          }
+        },
+        {
+          "name": "Сообщение пациента в чат",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageType\": \"Text\",\n  \"content\": \"Здравствуйте, доктор! Второй день температура 38.7 и сильный кашель.\",\n  \"isImportant\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "messages"] }
+          }
+        },
+        {
+          "name": "Врач присоединяется",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{doctorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"Doctor\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/join", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "join"] }
+          }
+        },
+        {
+          "name": "Сообщение врача (рекомендации)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{doctorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageType\": \"Text\",\n  \"content\": \"Похоже на ОРВИ. Назначу лечение, отдыхайте и пейте больше жидкости.\",\n  \"isImportant\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "messages"] }
+          }
+        },
+        {
+          "name": "История сообщений",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/messages?afterSequence=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "consultations", "{{consultationId}}", "messages"],
+              "query": [{ "key": "afterSequence", "value": "0" }]
+            }
+          }
+        },
+        {
+          "name": "Врач завершает консультацию (диагноз)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{doctorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"complaints\": \"Температура, кашель, боль в горле\",\n  \"anamnesis\": \"Болен 2 дня, контакт с заболевшим ОРВИ\",\n  \"examinationNotes\": \"Зев гиперемирован, дыхание везикулярное\",\n  \"preliminaryDiagnosisIcd10\": \"J06.9\",\n  \"preliminaryDiagnosisText\": \"Острая инфекция верхних дыхательных путей\",\n  \"recommendations\": \"Покой, обильное питьё, симптоматическое лечение\",\n  \"prescriptions\": [\"Парацетамол при температуре\"],\n  \"labOrders\": []\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/complete", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "complete"] }
+          }
+        },
+        {
+          "name": "Пациент подтверждает завершение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/confirm", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "confirm"] }
+          }
+        },
+        {
+          "name": "Оценка консультации пациентом",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"Patient\",\n  \"score\": 5,\n  \"feedback\": \"Спасибо, всё понятно!\",\n  \"clarityScore\": 5,\n  \"timelinessScore\": 5,\n  \"problemResolved\": \"Yes\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/consultations/{{consultationId}}/ratings", "host": ["{{baseUrl}}"], "path": ["api", "v1", "consultations", "{{consultationId}}", "ratings"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Рецепт",
+      "item": [
+        {
+          "name": "Выписать рецепт (врач)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Статус 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "try {",
+                  "  var json = pm.response.json();",
+                  "  var id = json.id || json.prescriptionId;",
+                  "  if (id) { pm.collectionVariables.set('prescriptionId', id); }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{doctorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientUserId}}\",\n  \"consultationId\": \"{{consultationId}}\",\n  \"diagnosisForPrescription\": \"J06.9 Острая инфекция верхних дыхательных путей\",\n  \"isPreferential\": false,\n  \"allowedRefills\": 0,\n  \"autoRenewalEnabled\": false,\n  \"medications\": [\n    {\n      \"tradeName\": \"Парацетамол\",\n      \"inn\": \"Paracetamol\",\n      \"dosageForm\": \"Таблетки\",\n      \"dosage\": \"500 мг\",\n      \"packageQuantity\": \"20 шт\",\n      \"route\": \"Перорально\",\n      \"frequency\": \"3 раза в день\",\n      \"courseDays\": 5,\n      \"specialInstructions\": \"После еды, при температуре выше 38\",\n      \"atcCode\": \"N02BE01\",\n      \"requiresPrescription\": false,\n      \"maxDailyDose\": \"3000 мг\"\n    }\n  ],\n  \"confirmWarnings\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/prescriptions", "host": ["{{baseUrl}}"], "path": ["api", "v1", "prescriptions"] }
+          }
+        },
+        {
+          "name": "Валидация рецепта (врач)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{doctorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/prescriptions/{{prescriptionId}}/validate", "host": ["{{baseUrl}}"], "path": ["api", "v1", "prescriptions", "{{prescriptionId}}", "validate"] }
+          }
+        },
+        {
+          "name": "Подписать рецепт (врач)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{doctorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/prescriptions/{{prescriptionId}}/sign?confirmWarnings=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "prescriptions", "{{prescriptionId}}", "sign"],
+              "query": [{ "key": "confirmWarnings", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Рецепт пациента — детали",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/prescriptions/{{prescriptionId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "prescriptions", "{{prescriptionId}}"] }
+          }
+        },
+        {
+          "name": "QR рецепта",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/prescriptions/{{prescriptionId}}/qr", "host": ["{{baseUrl}}"], "path": ["api", "v1", "prescriptions", "{{prescriptionId}}", "qr"] }
+          }
+        },
+        {
+          "name": "Инструкции по приёму",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/prescriptions/{{prescriptionId}}/instructions", "host": ["{{baseUrl}}"], "path": ["api", "v1", "prescriptions", "{{prescriptionId}}", "instructions"] }
+          }
+        },
+        {
+          "name": "Все рецепты пациента",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/prescriptions/patients/{{patientUserId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "prescriptions", "patients", "{{patientUserId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Выздоровление и медкарта",
+      "item": [
+        {
+          "name": "Записать событие выздоровления",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{patientToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventType\": \"recovery\",\n  \"sourceService\": \"consultation\",\n  \"payloadJson\": \"{\\\"diagnosisIcd10\\\":\\\"J06.9\\\",\\\"outcome\\\":\\\"recovered\\\",\\\"consultationId\\\":\\\"{{consultationId}}\\\"}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/medical-records/patients/{{patientUserId}}/events", "host": ["{{baseUrl}}"], "path": ["api", "v1", "medical-records", "patients", "{{patientUserId}}", "events"] }
+          }
+        },
+        {
+          "name": "История болезни пациента",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/medical-records/patients/{{patientUserId}}/history", "host": ["{{baseUrl}}"], "path": ["api", "v1", "medical-records", "patients", "{{patientUserId}}", "history"] }
+          }
+        },
+        {
+          "name": "Текущее состояние пациента",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/medical-records/patients/{{patientUserId}}/state", "host": ["{{baseUrl}}"], "path": ["api", "v1", "medical-records", "patients", "{{patientUserId}}", "state"] }
+          }
+        },
+        {
+          "name": "История уведомлений пациента",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/history?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "history"],
+              "query": [{ "key": "limit", "value": "50" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Завершение сессии",
+      "item": [
+        {
+          "name": "Logout пациента",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "logout"] }
+          }
+        }
+      ]
+    }
+  ]
+}

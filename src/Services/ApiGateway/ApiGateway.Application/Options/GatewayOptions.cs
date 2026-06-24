@@ -26,6 +26,14 @@ public sealed class BackendServicesOptions
     public string QualityService { get; set; } = "http://localhost:5295";
 }
 
+public sealed class ServiceAuthOptions
+{
+    public const string SectionName = "ServiceAuth";
+
+    public string ApiKey { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = "api-gateway";
+}
+
 public sealed class RateLimitingOptions
 {
     public const string SectionName = "RateLimiting";

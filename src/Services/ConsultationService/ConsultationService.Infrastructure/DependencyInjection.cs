@@ -50,7 +50,15 @@ public static class DependencyInjection
         services.AddHostedService<RoutingDecisionConsumerHostedService>();
         services.AddHostedService<SessionTimeoutHostedService>();
 
-        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>();
+        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>(client =>
+        {
+            var apiKey = configuration["ServiceAuth:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("X-Service-Key", apiKey);
+                client.DefaultRequestHeaders.Add("X-Service-Name", "consultation-service");
+            }
+        });
         services.AddSignalR();
 
         return services;

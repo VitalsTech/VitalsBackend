@@ -10,7 +10,7 @@ namespace UserService.API.Controllers
     [ApiController]
     [Route("internal")]
     [Authorize(Policy = "InternalService")]
-    internal class InternalController : ControllerBase
+    public class InternalController : ControllerBase
     {
         private readonly IMultiProfileUserService _multiProfileUserService;
         private readonly IPermissionService _permissionService;
