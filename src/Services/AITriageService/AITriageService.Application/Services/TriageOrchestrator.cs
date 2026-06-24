@@ -1,0 +1,160 @@
+using System.Text.Json;
+using AITriageService.Application.DTOs;
+using AITriageService.Application.Exceptions;
+using AITriageService.Application.Interfaces;
+using AITriageService.Domain.Entities;
+using AITriageService.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
+
+namespace AITriageService.Application.Services;
+
+public sealed class TriageOrchestrator : ITriageOrchestrator
+{
+    private readonly ITriageSessionRepository _sessions;
+    private readonly ISymptomParser _parser;
+    private readonly INerService _ner;
+    private readonly ILlmTriageService _llm;
+    private readonly IMedicalRecordContextClient _medicalRecord;
+    private readonly ITriageEventPublisher _publisher;
+    private readonly ILogger<TriageOrchestrator> _logger;
+
+    public TriageOrchestrator(
+        ITriageSessionRepository sessions,
+        ISymptomParser parser,
+        INerService ner,
+        ILlmTriageService llm,
+        IMedicalRecordContextClient medicalRecord,
+        ITriageEventPublisher publisher,
+        ILogger<TriageOrchestrator> logger)
+    {
+        _sessions = sessions;
+        _parser = parser;
+        _ner = ner;
+        _llm = llm;
+        _medicalRecord = medicalRecord;
+        _publisher = publisher;
+        _logger = logger;
+    }
+
+    public async Task<TriageSessionResponse> CreateSessionAsync(CreateTriageSessionRequest request, CancellationToken cancellationToken = default)
+    {
+        var session = new TriageSession
+        {
+            PatientId = request.PatientId,
+            CorrelationId = request.CorrelationId
+        };
+
+        await _sessions.AddAsync(session, cancellationToken);
+        await _sessions.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Triage session {SessionId} created for patient {PatientId}", session.Id, session.PatientId);
+        return MapSession(session);
+    }
+
+    public async Task<TriageSessionResponse> ProcessMessageAsync(
+        Guid sessionId,
+        SendTriageMessageRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            ?? throw new TriageNotFoundException(sessionId);
+
+        if (string.IsNullOrWhiteSpace(request.Message))
+            throw new TriageValidationException("Message cannot be empty.");
+
+        var patientMessage = new TriageMessage
+        {
+            SessionId = sessionId,
+            Role = "Patient",
+            Content = request.Message.Trim()
+        };
+        await _sessions.AddMessageAsync(patientMessage, cancellationToken);
+
+        var parsed = _parser.Parse(patientMessage.Content);
+        var ner = await _ner.ExtractAsync(patientMessage.Content, parsed, cancellationToken);
+        var medicalContext = await _medicalRecord.GetContextAsync(session.PatientId, cancellationToken);
+
+        var history = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new TriageMessageDto { Role = m.Role, Content = m.Content, CreatedAt = m.CreatedAt })
+            .ToList();
+
+        var llmResult = await _llm.AnalyzeAsync(new TriagePromptContext
+        {
+            SessionId = sessionId,
+            PatientId = session.PatientId,
+            CurrentMessage = patientMessage.Content,
+            DialogHistory = history,
+            ParsedEntities = parsed,
+            NerEntities = ner,
+            MedicalContext = medicalContext
+        }, cancellationToken);
+
+        var assistantText = llmResult.EmergencyWarning
+            ? $"{llmResult.RecommendedAction}\n\n{llmResult.NextQuestion}"
+            : $"{llmResult.NextQuestion}\n\nРекомендация: {llmResult.RecommendedAction}\n\nВажно: это предварительная оценка, а не диагноз. Назначение лекарств возможно только врачом.";
+
+        var assistantMessage = new TriageMessage
+        {
+            SessionId = sessionId,
+            Role = "Assistant",
+            Content = assistantText
+        };
+        await _sessions.AddMessageAsync(assistantMessage, cancellationToken);
+
+        var assessment = new TriageAssessment
+        {
+            SessionId = sessionId,
+            MessageId = patientMessage.Id,
+            UrgencyLevel = llmResult.UrgencyLevel,
+            ExtractedEntitiesJson = JsonSerializer.Serialize(parsed),
+            NerEntitiesJson = JsonSerializer.Serialize(ner),
+            LlmResultJson = JsonSerializer.Serialize(llmResult),
+            AssistantReply = assistantText
+        };
+        await _sessions.AddAssessmentAsync(assessment, cancellationToken);
+
+        session.LatestUrgencyLevel = llmResult.UrgencyLevel;
+        session.UpdatedAt = DateTime.UtcNow;
+        await _sessions.SaveChangesAsync(cancellationToken);
+
+        await _publisher.PublishTriageCompletedAsync(sessionId, session.PatientId, llmResult, cancellationToken);
+
+        session = await _sessions.GetByIdAsync(sessionId, cancellationToken) ?? session;
+        return MapSession(session);
+    }
+
+    public async Task<TriageSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            ?? throw new TriageNotFoundException(sessionId);
+        return MapSession(session);
+    }
+
+    private static TriageSessionResponse MapSession(TriageSession session)
+    {
+        var latestAssessment = session.Assessments.OrderByDescending(a => a.CreatedAt).FirstOrDefault();
+        return new TriageSessionResponse
+        {
+            SessionId = session.Id,
+            PatientId = session.PatientId,
+            Status = session.Status,
+            LatestUrgencyLevel = session.LatestUrgencyLevel,
+            CreatedAt = session.CreatedAt,
+            Messages = session.Messages
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new TriageMessageDto { Role = m.Role, Content = m.Content, CreatedAt = m.CreatedAt })
+                .ToList(),
+            LatestAssessment = latestAssessment is null ? null : MapAssessment(latestAssessment)
+        };
+    }
+
+    private static TriageAssessmentDto MapAssessment(TriageAssessment assessment) => new()
+    {
+        UrgencyLevel = assessment.UrgencyLevel,
+        ExtractedEntities = JsonSerializer.Deserialize<List<ExtractedEntityDto>>(assessment.ExtractedEntitiesJson) ?? new(),
+        NerEntities = JsonSerializer.Deserialize<List<NerEntityDto>>(assessment.NerEntitiesJson) ?? new(),
+        LlmResult = JsonSerializer.Deserialize<LlmTriageResultDto>(assessment.LlmResultJson) ?? new(),
+        AssistantReply = assessment.AssistantReply
+    };
+}

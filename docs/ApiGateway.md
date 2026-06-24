@@ -1,6 +1,6 @@
 # API Gateway
 
-Единая точка входа для клиентов Vitals. Объединяет **AuthService**, **UserService** и **MedicalRecordService**.
+Единая точка входа для клиентов Vitals. Объединяет **AuthService**, **UserService**, **MedicalRecordService** и **AITriageService**.
 
 Публичный префикс: **`/api/v1/`**
 
@@ -13,7 +13,18 @@
 | `/api/v1/users/*` | UserService |
 | `/api/v1/admin/*` | UserService |
 | `/api/v1/medical-records/*` | MedicalRecordService |
+| `/api/v1/triage/*` | AITriageService |
 | `/api/v1/consultations`, `/doctors`, `/prescriptions` | 501 (заглушки) |
+
+### Triage через Gateway
+
+| Метод | Gateway | → Backend |
+|-------|---------|-----------|
+| POST | `/api/v1/triage/sessions` | `/api/triage/sessions` |
+| POST | `/api/v1/triage/sessions/{id}/messages` | `/api/triage/sessions/{id}/messages` |
+| GET | `/api/v1/triage/sessions/{id}` | `/api/triage/sessions/{id}` |
+
+Требуется JWT (`Authorization: Bearer`).
 
 ## Middleware (порядок)
 
@@ -42,15 +53,16 @@
 ```bash
 docker run -d -p 6379:6379 redis:7-alpine
 
-# UserService :5195, AuthService :5200, MedicalRecordService :5210
+# UserService :5195, AuthService :5200, MedicalRecordService :5210, AITriage :5220
 cd src/Services/ApiGateway
 dotnet run --project ApiGateway.API
 ```
 
 Gateway: http://localhost:5080/swagger
 
-Пример регистрации через Gateway:
-`POST http://localhost:5080/api/v1/auth/register`
+Примеры:
+- `POST http://localhost:5080/api/v1/auth/register`
+- `POST http://localhost:5080/api/v1/triage/sessions` (с JWT)
 
 ## Docker
 
