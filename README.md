@@ -2,8 +2,11 @@
 
 | Сервис | Путь | Порт (dev) |
 |--------|------|------------|
-| UserService | `src/Services/UserService` | 5001 |
-| AuthService | `src/Services/AuthService` | 5002 |
-| MedicalRecordService | `src/Services/MedicalRecordService` | 5003 |
+| **ApiGateway** | `src/Services/ApiGateway` | **5080** (единая точка входа) |
+| UserService | `src/Services/UserService` | 5195 |
+| AuthService | `src/Services/AuthService` | 5200 |
+| MedicalRecordService | `src/Services/MedicalRecordService` | 5210 |
 
-Документация: [UserService](docs/UserService.md), [AuthService](docs/AuthService.md), [MedicalRecordService](docs/MedicalRecordService.md).
+Клиенты обращаются только к **Gateway** (`/api/v1/...`).
+
+Документация: [ApiGateway](docs/ApiGateway.md), [UserService](docs/UserService.md), [AuthService](docs/AuthService.md), [MedicalRecordService](docs/MedicalRecordService.md).
