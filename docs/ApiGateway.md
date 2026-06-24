@@ -14,7 +14,9 @@
 | `/api/v1/admin/*` | UserService |
 | `/api/v1/medical-records/*` | MedicalRecordService |
 | `/api/v1/triage/*` | AITriageService |
-| `/api/v1/consultations`, `/doctors`, `/prescriptions` | 501 (заглушки) |
+| `/api/v1/consultations/*` | ConsultationService |
+| `/api/v1/consultations/hub/*` | ConsultationService (SignalR WebSocket) |
+| `/api/v1/doctors`, `/prescriptions` | 501 (заглушки) |
 
 ### Triage через Gateway
 

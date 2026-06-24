@@ -1,0 +1,45 @@
+services:
+  postgres-consultation:
+    image: postgres:15
+    container_name: vitals-postgres-consultation
+    environment:
+      POSTGRES_DB: ConsultationDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres-consultation-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vitals-network
+
+  consultation.api:
+    build:
+      context: .
+      dockerfile: ConsultationService.API/Dockerfile
+    container_name: vitals-consultation
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres-consultation;Port=5432;Database=ConsultationDb;Username=postgres;Password=postgres123
+      - MedicalRecordService__BaseUrl=http://medicalrecordservice.api:80
+      - Jwt__JwksUrl=http://authservice.api:80/internal/jwks
+    ports:
+      - "5006:80"
+    depends_on:
+      postgres-consultation:
+        condition: service_healthy
+    networks:
+      - vitals-network
+
+volumes:
+  postgres-consultation-data:
+
+networks:
+  vitals-network:
+    driver: bridge
