@@ -1,6 +1,7 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
+VisualStudioVersion = 17.13.35825.156 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Application", "ApiGateway.Application\ApiGateway.Application.csproj", "{D1E2F3A4-B5C6-4789-D012-3456789ABCDE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway.Infrastructure", "ApiGateway.Infrastructure\ApiGateway.Infrastructure.csproj", "{D2E2F3A4-B5C6-4789-D012-3456789ABCDE}"
@@ -15,9 +16,21 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{D1E2F3A4-B5C6-4789-D012-3456789ABCDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D1E2F3A4-B5C6-4789-D012-3456789ABCDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1E2F3A4-B5C6-4789-D012-3456789ABCDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1E2F3A4-B5C6-4789-D012-3456789ABCDE}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D2E2F3A4-B5C6-4789-D012-3456789ABCDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D2E2F3A4-B5C6-4789-D012-3456789ABCDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2E2F3A4-B5C6-4789-D012-3456789ABCDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2E2F3A4-B5C6-4789-D012-3456789ABCDE}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D3E2F3A4-B5C6-4789-D012-3456789ABCDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D3E2F3A4-B5C6-4789-D012-3456789ABCDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3E2F3A4-B5C6-4789-D012-3456789ABCDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3E2F3A4-B5C6-4789-D012-3456789ABCDE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {174F9AE0-1A1C-4F2D-A62E-50104675F730}
 	EndGlobalSection
 EndGlobal

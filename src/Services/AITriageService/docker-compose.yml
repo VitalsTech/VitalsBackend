@@ -1,0 +1,45 @@
+services:
+  postgres-triage:
+    image: postgres:15
+    container_name: vitals-postgres-triage
+    environment:
+      POSTGRES_DB: AITriageDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-triage-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vitals-network
+
+  aitriage.api:
+    build:
+      context: .
+      dockerfile: AITriageService.API/Dockerfile
+    container_name: vitals-ai-triage
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres-triage;Port=5432;Database=AITriageDb;Username=postgres;Password=postgres123
+      - MedicalRecordService__BaseUrl=http://medicalrecordservice.api:80
+      - Jwt__JwksUrl=http://authservice.api:80/internal/jwks
+    ports:
+      - "5004:80"
+    depends_on:
+      postgres-triage:
+        condition: service_healthy
+    networks:
+      - vitals-network
+
+volumes:
+  postgres-triage-data:
+
+networks:
+  vitals-network:
+    driver: bridge
