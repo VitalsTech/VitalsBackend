@@ -9,7 +9,6 @@
 | Сервис / функция | Где видно | Поведение сейчас |
 | --- | --- | --- |
 | **Doctor search / schedule** | `ApiGateway` → `/api/v1/doctors/*` | HTTP 501 |
-| **Notification Service** | — | Не реализован (ожидает события `auto_response_required`, уведомления пациентам) |
 | **Integration Service** | — | Не реализован (лаборатории, скорая, внешние API) |
 | **Emergency handler** | — | Не реализован (ожидает `emergency_required`) |
 
@@ -114,6 +113,21 @@
 
 ---
 
+## NotificationService
+
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
+| --- | --- | --- | --- |
+| Kafka consumer | `KafkaNotificationConsumerHostedService` | События через **POST /internal/notifications/events** | `Kafka:Enabled: false` |
+| Push (APNS/FCM) | `PushChannelDispatcher` | Логирует отправку, без реальных провайдеров | — |
+| SMS / Email / Voice | `SmsChannelDispatcher`, `EmailChannelDispatcher`, `VoiceChannelDispatcher` | Заглушки через Integration Service | `IntegrationService:UseStub: true` |
+| Redis (шаблоны, dedup, prefs) | — | Всё в **PostgreSQL** | `Redis:Enabled: false` |
+| Настройки из User Service | `UserPreferenceService` | Локальная таблица + дефолты | — |
+| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+
+Обработка без Kafka: **`POST /internal/notifications/events`**.
+
+---
+
 ## Межсервисные разрывы (интеграции-«заглушки»)
 
 Связи, которые в архитектуре описаны через Kafka/HTTP, но **сейчас не замкнуты автоматически**:
@@ -123,11 +137,12 @@
 | AI Triage → Routing | `triage.completed` (Kafka) | Triage **логирует** событие; Routing принимает **ручной POST** на internal API |
 | Routing → Consultation | `routing.decision` (Kafka) | Routing **логирует**; Consultation принимает **POST /internal/consultations/routing-decision** |
 | Consultation → Medical Record | HTTP append events | **Работает**; при ошибке MR — warning в лог |
-| Consultation → Notification | `consultation.created` | Notification Service **не существует** |
+| Consultation → Notification | `consultation.created` | Consultation **логирует** Kafka; Notification принимает **POST /internal/notifications/events** |
+| Prescription → Notification | `prescription.issued`, `prescription.expiring_soon` | Prescription **логирует**; Notification — **POST /internal/notifications/events** |
 | Prescription → Integration | отправка в аптеку | **Заглушка** `StubPharmacyIntegrationClient` |
 | Prescription → Medical Record | HTTP append | **Работает** при подписании/выдаче |
 | Routing → Integration | `lab.order_required`, `emergency_required` | Integration Service **не существует** |
-| Routing → Notification | `auto_response_required` | Notification Service **не существует** |
+| Routing → Notification | `auto_response_required` | Routing **логирует**; Notification — **POST /internal/notifications/events** |
 | Routing / Triage → Medical Record | HTTP контекст пациента | **Работает** (`GET internal/medical-records/patients/{id}/state`); при недоступности MR — routing/triage продолжают с `null` контекстом |
 
 ---
@@ -136,7 +151,7 @@
 
 | Где | Что происходит |
 | --- | --- |
-| AITriageService, RoutingService, MedicalRecordService, ConsultationService, PrescriptionService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
+| AITriageService, RoutingService, MedicalRecordService, ConsultationService, PrescriptionService, NotificationService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
 | ApiGateway | Временный RSA-ключ, если AuthService не запущен (Development) |
 | AuthService | RSA-ключ для подписи JWT генерируется при старте, если PEM не задан |
 | AuthService | Код восстановления пароля пишется в лог приложения |
@@ -180,3 +195,4 @@ Auth:
 - [RoutingService](RoutingService.md) — scheduler, Kafka, Redis
 - [ConsultationService](ConsultationService.md) — SFU, SignalR, Kafka
 - [PrescriptionService](PrescriptionService.md) — validation, e-sign, pharmacy stub
+- [NotificationService](NotificationService.md) — channels, templates, Kafka
