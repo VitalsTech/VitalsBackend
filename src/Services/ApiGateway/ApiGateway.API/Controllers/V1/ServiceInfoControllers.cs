@@ -10,12 +10,3 @@ public sealed class DoctorsController : ControllerBase
     public IActionResult NotImplemented() =>
         StatusCode(StatusCodes.Status501NotImplemented, new { error = "Doctor search is not available yet." });
 }
-
-[ApiController]
-[Route("api/v1/prescriptions")]
-public sealed class PrescriptionsController : ControllerBase
-{
-    [HttpGet]
-    public IActionResult NotImplemented() =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { error = "Prescription Service is not connected yet." });
-}

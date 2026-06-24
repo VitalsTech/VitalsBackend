@@ -27,11 +27,13 @@ services:
       - Services__MedicalRecordService=http://medicalrecordservice.api:80
       - Services__AITriageService=http://aitriage.api:80
       - Services__ConsultationService=http://consultation.api:80
+      - Services__PrescriptionService=http://prescription.api:80
       - ReverseProxy__Clusters__auth-cluster__Destinations__auth__Address=http://authservice.api:80/
       - ReverseProxy__Clusters__users-cluster__Destinations__users__Address=http://userservice.api:80/
       - ReverseProxy__Clusters__medical-cluster__Destinations__medical__Address=http://medicalrecordservice.api:80/
       - ReverseProxy__Clusters__triage-cluster__Destinations__triage__Address=http://aitriage.api:80/
       - ReverseProxy__Clusters__consultation-cluster__Destinations__consultation__Address=http://consultation.api:80/
+      - ReverseProxy__Clusters__prescription-cluster__Destinations__prescription__Address=http://prescription.api:80/
     ports:
       - "5000:80"
     depends_on:

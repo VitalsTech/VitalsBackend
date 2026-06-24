@@ -16,7 +16,8 @@
 | `/api/v1/triage/*` | AITriageService |
 | `/api/v1/consultations/*` | ConsultationService |
 | `/api/v1/consultations/hub/*` | ConsultationService (SignalR WebSocket) |
-| `/api/v1/doctors`, `/prescriptions` | 501 (заглушки) |
+| `/api/v1/prescriptions/*` | PrescriptionService |
+| `/api/v1/doctors` | 501 (заглушка) |
 
 ### Triage через Gateway
 

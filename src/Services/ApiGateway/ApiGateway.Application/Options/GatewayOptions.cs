@@ -19,6 +19,7 @@ public sealed class BackendServicesOptions
     public string MedicalRecordService { get; set; } = "http://localhost:5210";
     public string AITriageService { get; set; } = "http://localhost:5220";
     public string ConsultationService { get; set; } = "http://localhost:5240";
+    public string PrescriptionService { get; set; } = "http://localhost:5250";
 }
 
 public sealed class RateLimitingOptions

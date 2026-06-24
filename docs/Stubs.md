@@ -9,7 +9,6 @@
 | Сервис / функция | Где видно | Поведение сейчас |
 | --- | --- | --- |
 | **Doctor search / schedule** | `ApiGateway` → `/api/v1/doctors/*` | HTTP 501 |
-| **Prescription Service** | `ApiGateway` → `/api/v1/prescriptions/*` | HTTP 501 |
 | **Notification Service** | — | Не реализован (ожидает события `auto_response_required`, уведомления пациентам) |
 | **Integration Service** | — | Не реализован (лаборатории, скорая, внешние API) |
 | **Emergency handler** | — | Не реализован (ожидает `emergency_required`) |
@@ -22,7 +21,7 @@
 
 | Заглушка | Класс / файл | Описание | Как заменить |
 | --- | --- | --- | --- |
-| Неподключённые backend-ы | `DoctorsController`, `PrescriptionsController` | Любой запрос → **501** |
+| Неподключённые backend-ы | `DoctorsController` | Любой запрос → **501** |
 | Routing Service не в Gateway | `appsettings.json` (YARP) | `/api/v1/routing/*` отсутствует; Routing — только internal HTTP :5230 | Добавить reverse proxy (если нужен публичный доступ) |
 | Ephemeral JWT key (dev) | `JwtSigningKeyProvider` | Если JWKS недоступен в **Development**, генерируется временный RSA-ключ | Запускать AuthService; задать `Jwt:JwksUrl` или `Jwt:RsaPublicKeyPem` |
 | Redis для rate limit | `RedisSlidingWindowRateLimitStore` | Работает только при доступном Redis (`localhost:6379`); без Redis — ошибка при старте | `docker run -p 6379:6379 redis:7-alpine` или docker-compose Gateway |
@@ -101,6 +100,20 @@
 
 ---
 
+## PrescriptionService
+
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
+| --- | --- | --- | --- |
+| Движок проверок | `RuleBasedPrescriptionValidationEngine` | Hardcoded аллергии/взаимодействия/беременность | — |
+| Права врача | `StubUserPermissionClient` | Блок ATC N05/N06, остальное разрешено | — |
+| Электронная подпись | `StubESignatureService` | Base64 stub, не УКЭП | `ESignature:UseStub: true` |
+| Integration / аптека | `StubPharmacyIntegrationClient` | Fake order id | `IntegrationService:UseStub: true` |
+| Kafka | `LoggingPrescriptionEventPublisher` | Все топики → **лог** | `Kafka:Enabled: false` |
+| Льготы / ЕГИСЗ | — | Флаг `IsPreferential` в БД, без проверки в гос. системе | — |
+| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+
+---
+
 ## Межсервисные разрывы (интеграции-«заглушки»)
 
 Связи, которые в архитектуре описаны через Kafka/HTTP, но **сейчас не замкнуты автоматически**:
@@ -111,6 +124,8 @@
 | Routing → Consultation | `routing.decision` (Kafka) | Routing **логирует**; Consultation принимает **POST /internal/consultations/routing-decision** |
 | Consultation → Medical Record | HTTP append events | **Работает**; при ошибке MR — warning в лог |
 | Consultation → Notification | `consultation.created` | Notification Service **не существует** |
+| Prescription → Integration | отправка в аптеку | **Заглушка** `StubPharmacyIntegrationClient` |
+| Prescription → Medical Record | HTTP append | **Работает** при подписании/выдаче |
 | Routing → Integration | `lab.order_required`, `emergency_required` | Integration Service **не существует** |
 | Routing → Notification | `auto_response_required` | Notification Service **не существует** |
 | Routing / Triage → Medical Record | HTTP контекст пациента | **Работает** (`GET internal/medical-records/patients/{id}/state`); при недоступности MR — routing/triage продолжают с `null` контекстом |
@@ -121,7 +136,7 @@
 
 | Где | Что происходит |
 | --- | --- |
-| AITriageService, RoutingService, MedicalRecordService, ConsultationService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
+| AITriageService, RoutingService, MedicalRecordService, ConsultationService, PrescriptionService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
 | ApiGateway | Временный RSA-ключ, если AuthService не запущен (Development) |
 | AuthService | RSA-ключ для подписи JWT генерируется при старте, если PEM не задан |
 | AuthService | Код восстановления пароля пишется в лог приложения |
@@ -164,3 +179,4 @@ Auth:
 - [AITriageService](AITriageService.md) — NER/LLM/Kafka
 - [RoutingService](RoutingService.md) — scheduler, Kafka, Redis
 - [ConsultationService](ConsultationService.md) — SFU, SignalR, Kafka
+- [PrescriptionService](PrescriptionService.md) — validation, e-sign, pharmacy stub
