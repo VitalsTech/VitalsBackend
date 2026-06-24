@@ -16,5 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\AITriageService.Application\AITriageService.Application.csproj" />
     <ProjectReference Include="..\AITriageService.Infrastructure\AITriageService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.AspNetCore.Authentication\Vitals.AspNetCore.Authentication.csproj" />
   </ItemGroup>
 </Project>

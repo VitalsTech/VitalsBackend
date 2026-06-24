@@ -33,4 +33,5 @@ public sealed class ConsultationSession
     public string? CancelReason { get; set; }
     public string? VideoRoomId { get; set; }
     public string ProtocolJson { get; set; } = "{}";
+    public string? ProtocolSignature { get; set; }
 }

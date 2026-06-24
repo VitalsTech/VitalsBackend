@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\UserService.Application\UserService.Application.csproj" />
     <ProjectReference Include="..\UserService.Infrastructure\UserService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.AspNetCore.Authentication\Vitals.AspNetCore.Authentication.csproj" />
   </ItemGroup>
 
 </Project>

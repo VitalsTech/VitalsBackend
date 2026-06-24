@@ -73,6 +73,34 @@ namespace UserService.Infrastructure.Migrations
                     b.ToTable("DoctorProfiles");
                 });
 
+            modelBuilder.Entity("UserService.Domain.Entities.DoctorScheduleSlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DoctorProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsOnline")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorProfileId", "StartsAt");
+
+                    b.ToTable("DoctorScheduleSlots");
+                });
+
             modelBuilder.Entity("UserService.Domain.Entities.OrganizationProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -176,7 +204,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000001"),
                             Action = "Read",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 955, DateTimeKind.Utc).AddTicks(9740),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(221),
                             Description = "Просмотр своей медицинской истории",
                             Name = "self.history.read",
                             Resource = "History"
@@ -185,7 +213,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000002"),
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(788),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1508),
                             Description = "Просмотр своего профиля",
                             Name = "self.profile.view",
                             Resource = "Profile"
@@ -194,7 +222,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000003"),
                             Action = "Edit",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(797),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1528),
                             Description = "Редактирование своего профиля",
                             Name = "self.profile.edit",
                             Resource = "Profile"
@@ -203,7 +231,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000004"),
                             Action = "Read",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(802),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1570),
                             Description = "Просмотр истории пациента (для врача)",
                             Name = "patient.history.read",
                             Resource = "History"
@@ -212,7 +240,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000005"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(807),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1575),
                             Description = "Выписка рецептов",
                             Name = "prescription.create",
                             Resource = "Prescription"
@@ -221,7 +249,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000006"),
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(815),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1654),
                             Description = "Просмотр рецептов",
                             Name = "prescription.view",
                             Resource = "Prescription"
@@ -230,7 +258,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000007"),
                             Action = "Dispense",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(821),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1658),
                             Description = "Выдача лекарств по рецепту",
                             Name = "prescription.dispense",
                             Resource = "Prescription"
@@ -239,7 +267,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000008"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(825),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1714),
                             Description = "Создание заказа на анализы",
                             Name = "lab.order.create",
                             Resource = "Lab"
@@ -248,7 +276,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000009"),
                             Action = "Upload",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(830),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1719),
                             Description = "Загрузка результатов анализов",
                             Name = "lab.results.upload",
                             Resource = "Lab"
@@ -257,7 +285,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000010"),
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(835),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1723),
                             Description = "Просмотр результатов анализов",
                             Name = "lab.results.view",
                             Resource = "Lab"
@@ -266,7 +294,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000011"),
                             Action = "Start",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(840),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1726),
                             Description = "Начало консультации",
                             Name = "consultation.start",
                             Resource = "Consultation"
@@ -275,7 +303,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000012"),
                             Action = "Join",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(844),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1729),
                             Description = "Подключение к консультации",
                             Name = "consultation.join",
                             Resource = "Consultation"
@@ -284,7 +312,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000013"),
                             Action = "Manage",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(849),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1732),
                             Description = "Управление пользователями организации",
                             Name = "org.users.manage",
                             Resource = "Organization"
@@ -293,7 +321,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000014"),
                             Action = "Manage",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(853),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1734),
                             Description = "Управление расписанием организации",
                             Name = "org.schedule.manage",
                             Resource = "Organization"
@@ -302,7 +330,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000015"),
                             Action = "View",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(858),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1737),
                             Description = "Просмотр финансовой отчетности",
                             Name = "org.finance.view",
                             Resource = "Organization"
@@ -311,7 +339,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000016"),
                             Action = "ViewAll",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(862),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1743),
                             Description = "Просмотр всех пользователей",
                             Name = "users.view.all",
                             Resource = "Users"
@@ -320,7 +348,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000017"),
                             Action = "Block",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(866),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1747),
                             Description = "Блокировка пользователей",
                             Name = "users.block",
                             Resource = "Users"
@@ -329,7 +357,7 @@ namespace UserService.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000018"),
                             Action = "Manage",
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(872),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(1751),
                             Description = "Управление настройками системы",
                             Name = "system.settings.manage",
                             Resource = "System"
@@ -396,7 +424,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000001"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(6410),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(8495),
                             Description = "Обычный пациент",
                             IsSystem = true,
                             Name = "Patient"
@@ -404,7 +432,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000002"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(7239),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(9193),
                             Description = "Врач",
                             IsSystem = true,
                             Name = "Doctor"
@@ -412,7 +440,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(7246),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(9197),
                             Description = "Администратор клиники",
                             IsSystem = true,
                             Name = "ClinicAdmin"
@@ -420,7 +448,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000004"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(7252),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(9201),
                             Description = "Сотрудник лаборатории",
                             IsSystem = true,
                             Name = "LabEmployee"
@@ -428,7 +456,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000005"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(7257),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(9203),
                             Description = "Сотрудник аптеки",
                             IsSystem = true,
                             Name = "PharmacyEmployee"
@@ -436,7 +464,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000006"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(7265),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(9213),
                             Description = "Администратор платформы",
                             IsSystem = true,
                             Name = "PlatformAdmin"
@@ -444,7 +472,7 @@ namespace UserService.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000007"),
-                            CreatedAt = new DateTime(2026, 5, 14, 14, 26, 28, 956, DateTimeKind.Utc).AddTicks(7270),
+                            CreatedAt = new DateTime(2026, 6, 24, 16, 5, 16, 907, DateTimeKind.Utc).AddTicks(9215),
                             Description = "Суперадминистратор",
                             IsSystem = true,
                             Name = "SuperAdmin"
@@ -567,6 +595,17 @@ namespace UserService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Profile");
+                });
+
+            modelBuilder.Entity("UserService.Domain.Entities.DoctorScheduleSlot", b =>
+                {
+                    b.HasOne("UserService.Domain.Entities.DoctorProfile", "DoctorProfile")
+                        .WithMany()
+                        .HasForeignKey("DoctorProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DoctorProfile");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.OrganizationProfile", b =>

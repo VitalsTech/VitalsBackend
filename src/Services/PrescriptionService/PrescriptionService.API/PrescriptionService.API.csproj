@@ -16,5 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\PrescriptionService.Application\PrescriptionService.Application.csproj" />
     <ProjectReference Include="..\PrescriptionService.Infrastructure\PrescriptionService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.AspNetCore.Authentication\Vitals.AspNetCore.Authentication.csproj" />
   </ItemGroup>
 </Project>

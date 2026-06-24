@@ -8,9 +8,12 @@
 
 | Сервис / функция | Где видно | Поведение сейчас |
 | --- | --- | --- |
-| **Doctor search / schedule** | `ApiGateway` → `/api/v1/doctors/*` | HTTP 501 |
-| **Integration Service** | — | Не реализован (лаборатории, скорая, внешние API) |
-| **Emergency handler** | — | Не реализован (ожидает `emergency_required`) |
+| **Doctor search / schedule** | `DoctorsController` → UserService | Поиск через UserService; расписание из `DoctorScheduleSlots` |
+| **Integration Service** | `IntegrationService` (:5270) | HTTP + Kafka; payment/voice/EGISZ/storage endpoints; SMS/email/push/pharmacy/lab — **лог-stub** |
+| **Payment Service** | `PaymentService` (:5280) | Каркас; gateway через Integration |
+| **Analytics Service** | `AnalyticsService` (:5290) | Kafka metrics + dashboard API |
+| **Quality Service** | `QualityService` (:5295) | Kafka quality scores + metrics API |
+| **Emergency handler** | `EmergencyRequiredConsumerHostedService` | Consumer `emergency_required` → HTTP dispatch stub |
 
 Файл заглушек Gateway: `src/Services/ApiGateway/ApiGateway.API/Controllers/V1/ServiceInfoControllers.cs`.
 
@@ -18,12 +21,16 @@
 
 ## ApiGateway
 
-| Заглушка | Класс / файл | Описание | Как заменить |
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
 | --- | --- | --- | --- |
-| Неподключённые backend-ы | `DoctorsController` | Любой запрос → **501** |
-| Routing Service не в Gateway | `appsettings.json` (YARP) | `/api/v1/routing/*` отсутствует; Routing — только internal HTTP :5230 | Добавить reverse proxy (если нужен публичный доступ) |
-| Ephemeral JWT key (dev) | `JwtSigningKeyProvider` | Если JWKS недоступен в **Development**, генерируется временный RSA-ключ | Запускать AuthService; задать `Jwt:JwksUrl` или `Jwt:RsaPublicKeyPem` |
-| Redis для rate limit | `RedisSlidingWindowRateLimitStore` | Работает только при доступном Redis (`localhost:6379`); без Redis — ошибка при старте | `docker run -p 6379:6379 redis:7-alpine` или docker-compose Gateway |
+| Расписание врачей | `DoctorsController.GetSchedule` | Прокси в UserService (`DoctorScheduleSlots`) | — |
+| Rate limit без Redis (dev) | `InMemorySlidingWindowRateLimitStore` | In-memory fallback | `RateLimiting:UseInMemoryFallback: true` |
+| ESIA OAuth | YARP `auth-esia` | Прозрачный proxy (без DTO Gateway) | — |
+| SignalR чат | YARP `consultation-hub` | WebSocket proxy | — |
+| Routing Service | — | Internal-only :5230 | — |
+| Ephemeral JWT key (dev) | `JwtSigningKeyProvider` | Временный RSA при недоступном JWKS | `Jwt:JwksUrl` |
+
+Все остальные публичные API — **контроллеры Gateway** с DTO + FluentValidation + `IBackendForwarder`.
 
 ---
 
@@ -52,8 +59,8 @@
 
 | Заглушка | Класс / файл | Описание | Конфиг |
 | --- | --- | --- | --- |
-| Kafka publisher | `LoggingMedicalRecordEventPublisher` | События `medical-record.events` **только в лог**, без Confluent | `Kafka:Enabled: false` |
-| JWT validation bypass (dev) | `Program.cs` | Если JWKS недоступен в Development — принимается любой Bearer-токен | `Jwt:JwksUrl` |
+| Kafka publisher | `KafkaMedicalRecordEventPublisher` | Confluent producer; при `Enabled: false` — no-op | `Kafka:Enabled: false` |
+| JWT validation | `AddVitalsAuthentication` | JWKS / service key; dev bypass только через `appsettings.Development.json` | `Jwt:JwksUrl`, `ServiceAuth:ApiKey` |
 
 ---
 
@@ -62,10 +69,10 @@
 | Заглушка / упрощение | Класс / файл | Описание | Конfig |
 | --- | --- | --- | --- |
 | Парсер симптомов (rule-based) | `RuleBasedSymptomParser` | Regex по русским формулировкам, **не NLP/ML** | — |
-| NER | `StubNerService` | Нормализация + коды МКБ-10 **без внешней модели** | `MlServices:UseStubModels: true` |
-| LLM триаж | `StubLlmTriageService` | Гипотезы, urgency, вопросы — **эвристики**, не LLM | `MlServices:UseStubModels: true` |
-| Kafka publisher | `LoggingTriageEventPublisher` | Топик `triage.completed` **только в лог** | `Kafka:Enabled: false` |
-| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+| NER | `HttpNerService` / `StubNerService` | HTTP к `MlServices:NerEndpoint`; fallback на rule-based stub | `MlServices:UseStubModels: true` |
+| LLM триаж | `HttpLlmTriageService` / `StubLlmTriageService` | HTTP к `MlServices:LlmEndpoint`; fallback на эвристики | `MlServices:UseStubModels: true` |
+| Kafka publisher | `KafkaTriageEventPublisher` | Confluent producer; при `Enabled: false` — no-op | `Kafka:Enabled: false` |
+| JWT validation | `AddVitalsAuthentication` | См. Medical Record | `Jwt:JwksUrl` |
 
 Эндпоинты реальных моделей (`MlServices:NerEndpoint`, `LlmEndpoint`) в DI **не подключены** — только stub-реализации.
 
@@ -76,11 +83,11 @@
 | Заглушка / упрощение | Класс / файл | Описание | Конфиг |
 | --- | --- | --- | --- |
 | Движок маршрутизации (rule-based) | `RuleBasedRoutingEngine` | Правила if/else по гипотезам и urgency, **не ML и не plugin-система** | `RoutingEngine:AlgorithmVersion` |
-| Расписание врачей | `StubDoctorScheduler` | 10 захардкоженных врачей, выбор по загрузке | — |
-| Kafka consumer | `TriageCompletedConsumerHostedService` | При `Enabled: false` — ничего не слушает; при `true` — **consumer не реализован**, только warning | `Kafka:Enabled: false` |
-| Kafka publisher | `LoggingRoutingEventPublisher` | `routing.decision`, `lab.order_required`, `emergency_required`, `auto_response_required` → **лог** | `Kafka:Enabled: false` |
+| Расписание врачей | `UserServiceDoctorScheduler` / `StubDoctorScheduler` | HTTP к UserService `DoctorScheduleSlots`; fallback — 10 hardcoded doctors | `UserService:UseStubSchedule: true` |
+| Kafka consumer | `TriageCompletedConsumerHostedService` | Confluent consumer `triage.completed` | `Kafka:Enabled: false` |
+| Kafka publisher | `KafkaRoutingEventPublisher` | Confluent producer | `Kafka:Enabled: false` |
 | Redis для маршрутов | — | `Redis:Enabled: false`; состояние в **PostgreSQL** (`patient_routes`) | `Redis:Enabled: false` |
-| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+| JWT validation | `AddVitalsAuthentication` | См. Medical Record | `Jwt:JwksUrl` |
 
 Обработка triage без Kafka: **`POST /internal/routing/triage-completed`**.
 
@@ -90,12 +97,12 @@
 
 | Заглушка / упрощение | Класс / файл | Описание | Конфиг |
 | --- | --- | --- | --- |
-| Kafka consumer | `RoutingDecisionConsumerHostedService` | `routing.decision` не слушается; создание через **POST /internal/consultations/routing-decision** | `Kafka:Enabled: false` |
-| Kafka publisher | `LoggingConsultationEventPublisher` | `consultation.created`, `consultation.completed`, … → **лог** | `Kafka:Enabled: false` |
-| SFU / WebRTC | `StubSfuSignalingService` | Возвращает fake room/token, **без медиапотоков** | `Sfu:UseStub: true` |
+| Kafka consumer | `RoutingDecisionConsumerHostedService` | Confluent consumer `routing.decision` | `Kafka:Enabled: false` |
+| Kafka publisher | `KafkaConsultationEventPublisher` | Confluent producer | `Kafka:Enabled: false` |
+| SFU / WebRTC | `LiveKitSfuSignalingService`, `HttpSfuSignalingService`, `StubSfuSignalingService` | LiveKit Room API или generic HTTP SFU; stub по умолчанию | `Sfu:UseStub: true` |
 | Redis hot state | `InMemorySessionStateStore` | Статус/unread **логируются**, персистентность в PostgreSQL | `Redis:Enabled: false` |
 | Напоминания push/SMS | — | Только `SessionTimeoutHostedService` (expire scan) | — |
-| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+| JWT validation | `AddVitalsAuthentication` | См. Medical Record | `Jwt:JwksUrl` |
 
 ---
 
@@ -105,11 +112,11 @@
 | --- | --- | --- | --- |
 | Движок проверок | `RuleBasedPrescriptionValidationEngine` | Hardcoded аллергии/взаимодействия/беременность | — |
 | Права врача | `StubUserPermissionClient` | Блок ATC N05/N06, остальное разрешено | — |
-| Электронная подпись | `StubESignatureService` | Base64 stub, не УКЭП | `ESignature:UseStub: true` |
+| Электронная подпись | `Vitals.ESignature` (`HttpESignatureProvider` / stub) | КЭП через HTTP gateway; stub Base64 по умолчанию | `ESignature:UseStub: true` |
 | Integration / аптека | `StubPharmacyIntegrationClient` | Fake order id | `IntegrationService:UseStub: true` |
-| Kafka | `LoggingPrescriptionEventPublisher` | Все топики → **лог** | `Kafka:Enabled: false` |
-| Льготы / ЕГИСЗ | — | Флаг `IsPreferential` в БД, без проверки в гос. системе | — |
-| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+| Kafka | `KafkaPrescriptionEventPublisher` | Confluent producer; при `Enabled: false` — no-op | `Kafka:Enabled: false` |
+| Льготы / ЕГИСЗ | `IntegrationEgiszClient` | Проверка через Integration `egisz/preferential/check`; stub при `UseStub: true` | `IntegrationService:UseStub: true` |
+| JWT validation | `AddVitalsAuthentication` | См. Medical Record | `Jwt:JwksUrl` |
 
 ---
 
@@ -117,32 +124,86 @@
 
 | Заглушка / упрощение | Класс / файл | Описание | Конфиг |
 | --- | --- | --- | --- |
-| Kafka consumer | `KafkaNotificationConsumerHostedService` | События через **POST /internal/notifications/events** | `Kafka:Enabled: false` |
-| Push (APNS/FCM) | `PushChannelDispatcher` | Логирует отправку, без реальных провайдеров | — |
-| SMS / Email / Voice | `SmsChannelDispatcher`, `EmailChannelDispatcher`, `VoiceChannelDispatcher` | Заглушки через Integration Service | `IntegrationService:UseStub: true` |
+| Kafka consumer | `KafkaNotificationConsumerHostedService` | Confluent consumer; fallback — **POST /internal/notifications/events** | `Kafka:Enabled: false` |
+| Push (APNS/FCM) | `PushChannelDispatcher` | При `IntegrationService:UseStub: false` → HTTP Integration; иначе лог | `IntegrationService:UseStub: true` |
+| SMS / Email / Voice | `SmsChannelDispatcher`, `EmailChannelDispatcher`, `VoiceChannelDispatcher` | SMS/Email/Voice → Integration HTTP или лог-stub | `IntegrationService:UseStub: true` |
+| DLQ | `DeadLetterNotification`, `NotificationOrchestrator` | После max retries → `dead_letter_notifications`; API `GET /internal/notifications/dlq` | `Notification:MaxRetryAttempts` |
+| Полный набор events | `EventChannelRouter` | `consultation.completed`, `prescription.expired`, `emergency.required`, `payment.completed`, … | — |
 | Redis (шаблоны, dedup, prefs) | — | Всё в **PostgreSQL** | `Redis:Enabled: false` |
 | Настройки из User Service | `UserPreferenceService` | Локальная таблица + дефолты | — |
-| JWT validation bypass (dev) | `Program.cs` | См. Medical Record | `Jwt:JwksUrl` |
+| JWT validation | `AddVitalsAuthentication` | См. Medical Record | `Jwt:JwksUrl` |
 
 Обработка без Kafka: **`POST /internal/notifications/events`**.
 
 ---
 
+## IntegrationService
+
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
+| --- | --- | --- | --- |
+| SMS / Email / Push | `IntegrationDispatchService` | HTTP API готов; провайдеры — **лог-stub** | — |
+| Payment gateway | `ProcessPaymentAsync` | `POST /internal/integration/payments/process` — stub (auto-complete) | — |
+| Voice calls | `SendVoiceCallAsync` | `POST /internal/integration/voice/call` — лог-stub | — |
+| ЕГИСЗ льготы | `CheckPreferentialEligibilityAsync` | `POST /internal/integration/egisz/preferential/check` — stub | — |
+| Object storage | `UploadObjectAsync` | `POST /internal/integration/storage/upload` → `Vitals.ObjectStorage` | `ObjectStorage:UseStub: true` |
+| Pharmacy / Lab | `IntegrationDispatchService` | Принимает заказы, без внешних API | — |
+| Emergency dispatch | `IntegrationDispatchService`, `EmergencyRequiredConsumerHostedService` | Consumer `emergency_required` + HTTP stub | `Kafka:Enabled: false` |
+| Lab orders (Kafka) | `LabOrderRequiredConsumerHostedService` | Consumer `lab.order_required` | `Kafka:Enabled: false` |
+
+Порт по умолчанию: **5270**. Health: `GET /internal/integration/health`.
+
+---
+
+## PaymentService
+
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
+| --- | --- | --- | --- |
+| Payment gateway | `IntegrationPaymentGatewayClient` | HTTP → Integration `payments/process` | `IntegrationService:BaseUrl` |
+| Kafka events | `KafkaPaymentEventPublisher` | `payment.completed` / `payment.failed` | `Kafka:Enabled: false` |
+
+Порт: **5280**. Gateway: `POST /api/v1/payments`.
+
+---
+
+## AnalyticsService / QualityService
+
+| Заглушка / упрощение | Описание | Конфиг |
+| --- | --- | --- |
+| Kafka consumers | Метрики из `consultation.completed`, `prescription.issued`, `triage.completed`, `payment.completed` | `Kafka:Enabled: false` |
+| Dashboard / metrics API | `GET /api/analytics/dashboard`, `GET /api/quality/metrics` | — |
+
+Порты: **5290** (Analytics), **5295** (Quality).
+
+---
+
+## Object Storage (`Vitals.ObjectStorage`)
+
+| Заглушка / упрощение | Класс / файл | Описание | Конфиг |
+| --- | --- | --- | --- |
+| In-memory stub | `StubObjectStorageProvider` | Fake URLs для dev | `ObjectStorage:UseStub: true` |
+| S3-compatible | `S3ObjectStorageProvider` | AWSSDK.S3 (MinIO/Yandex S3) | `ObjectStorage:ServiceUrl`, `BucketName`, keys |
+| MR attachments | `PatientAttachmentService` | `POST/GET .../attachments` | MedicalRecord `ObjectStorage` section |
+
+---
+
 ## Межсервисные разрывы (интеграции-«заглушки»)
 
-Связи, которые в архитектуре описаны через Kafka/HTTP, но **сейчас не замкнуты автоматически**:
+Связи, которые в архитектуре описаны через Kafka/HTTP. **Kafka-цепочка реализована** (Confluent), но по умолчанию `Kafka:Enabled: false` — нужен `docker-compose.infra.yml` и включение в конфиге.
 
 | Поток | Ожидание | Сейчас |
 | --- | --- | --- |
-| AI Triage → Routing | `triage.completed` (Kafka) | Triage **логирует** событие; Routing принимает **ручной POST** на internal API |
-| Routing → Consultation | `routing.decision` (Kafka) | Routing **логирует**; Consultation принимает **POST /internal/consultations/routing-decision** |
+| AI Triage → Routing | `triage.completed` (Kafka) | **Confluent producer/consumer**; fallback — POST `/internal/routing/triage-completed` |
+| Routing → Consultation | `routing.decision` (Kafka) | **Confluent producer/consumer**; fallback — POST `/internal/consultations/routing-decision` |
 | Consultation → Medical Record | HTTP append events | **Работает**; при ошибке MR — warning в лог |
-| Consultation → Notification | `consultation.created` | Consultation **логирует** Kafka; Notification принимает **POST /internal/notifications/events** |
-| Prescription → Notification | `prescription.issued`, `prescription.expiring_soon` | Prescription **логирует**; Notification — **POST /internal/notifications/events** |
-| Prescription → Integration | отправка в аптеку | **Заглушка** `StubPharmacyIntegrationClient` |
+| Consultation → Notification | `consultation.created` | **Confluent producer/consumer**; fallback — POST `/internal/notifications/events` |
+| Prescription → Notification | `prescription.issued`, `prescription.expiring_soon` | **Confluent producer**; Notification consumer или POST |
+| Prescription → Integration | отправка в аптеку / ЕГИСЗ | Pharmacy **stub**; ЕГИСЗ через Integration (stub) |
+| Payment → Integration | `payments/process` | **Stub** auto-complete |
+| Payment / Consultation → Analytics | Kafka topics | **Consumer** при `Kafka:Enabled: true` |
+| Consultation → Quality | `consultation.completed` | **Consumer** при `Kafka:Enabled: true` |
 | Prescription → Medical Record | HTTP append | **Работает** при подписании/выдаче |
-| Routing → Integration | `lab.order_required`, `emergency_required` | Integration Service **не существует** |
-| Routing → Notification | `auto_response_required` | Routing **логирует**; Notification — **POST /internal/notifications/events** |
+| Routing → Integration | `lab.order_required`, `emergency_required` | **Confluent consumer** в IntegrationService; dispatch — stub |
+| Routing → Notification | `auto_response_required` | **Confluent producer/consumer** |
 | Routing / Triage → Medical Record | HTTP контекст пациента | **Работает** (`GET internal/medical-records/patients/{id}/state`); при недоступности MR — routing/triage продолжают с `null` контекстом |
 
 ---
@@ -151,7 +212,7 @@
 
 | Где | Что происходит |
 | --- | --- |
-| AITriageService, RoutingService, MedicalRecordService, ConsultationService, PrescriptionService, NotificationService | JWT не проверяется, если JWKS недоступен и `ASPNETCORE_ENVIRONMENT=Development` |
+| AITriageService, RoutingService, MedicalRecordService, ConsultationService, PrescriptionService, NotificationService, IntegrationService, UserService | JWT bypass **только** при `AllowInsecureDevelopmentBypass: true` в `appsettings.Development.json` |
 | ApiGateway | Временный RSA-ключ, если AuthService не запущен (Development) |
 | AuthService | RSA-ключ для подписи JWT генерируется при старте, если PEM не задан |
 | AuthService | Код восстановления пароля пишется в лог приложения |

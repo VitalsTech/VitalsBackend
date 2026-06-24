@@ -20,5 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NotificationService.Application\NotificationService.Application.csproj" />
     <ProjectReference Include="..\NotificationService.Domain\NotificationService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.Messaging\Vitals.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.AspNetCore.Authentication\Vitals.AspNetCore.Authentication.csproj" />
   </ItemGroup>
 </Project>

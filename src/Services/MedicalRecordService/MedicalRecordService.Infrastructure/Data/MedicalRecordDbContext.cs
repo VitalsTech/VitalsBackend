@@ -17,6 +17,7 @@ public class MedicalRecordDbContext : DbContext
     public DbSet<PatientLabResultProjection> LabResults => Set<PatientLabResultProjection>();
     public DbSet<AccessGrant> AccessGrants => Set<AccessGrant>();
     public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
+    public DbSet<PatientAttachment> Attachments => Set<PatientAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +74,15 @@ public class MedicalRecordDbContext : DbContext
         {
             e.ToTable("audit_logs");
             e.HasIndex(x => new { x.PatientId, x.OccurredAt });
+        });
+
+        modelBuilder.Entity<PatientAttachment>(e =>
+        {
+            e.ToTable("patient_attachments");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.PatientId);
+            e.Property(x => x.FileName).HasMaxLength(256);
+            e.Property(x => x.ObjectKey).HasMaxLength(512);
         });
     }
 }

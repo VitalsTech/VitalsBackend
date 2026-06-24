@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Common;
 using UserService.Application.Exceptions;
 using UserService.Application.Interfaces;
@@ -9,6 +10,7 @@ namespace UserService.API.Controllers
 {
     [ApiController]
     [Route("api/users")]
+    [Authorize(Policy = "InternalService")]
     public class UsersController : ControllerBase
     {
         private readonly IMultiProfileUserService _multiProfileUserService;

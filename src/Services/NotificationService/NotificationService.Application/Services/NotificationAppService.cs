@@ -152,6 +152,22 @@ public sealed class NotificationAppService : INotificationService
     public Task<NotificationStatsResponse> GetStatsAsync(CancellationToken cancellationToken = default) =>
         _repo.GetStatsAsync(DateTime.UtcNow.AddHours(-1), cancellationToken);
 
+    public async Task<IReadOnlyList<DeadLetterNotificationDto>> GetDeadLettersAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        var entries = await _repo.GetDeadLettersAsync(limit, cancellationToken);
+        return entries.Select(x => new DeadLetterNotificationDto
+        {
+            Id = x.Id,
+            OriginalDeliveryId = x.OriginalDeliveryId,
+            UserId = x.UserId,
+            EventType = x.EventType,
+            Channel = x.Channel,
+            ErrorMessage = x.ErrorMessage,
+            AttemptCount = x.AttemptCount,
+            MovedAt = x.MovedAt
+        }).ToList();
+    }
+
     private static NotificationDeliveryResponse Map(NotificationDeliveryLog log) => new()
     {
         DeliveryId = log.Id,

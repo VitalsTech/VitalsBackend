@@ -140,6 +140,9 @@ namespace ConsultationService.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ProtocolSignature")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("RoutingDecisionId")
                         .HasColumnType("uuid");
 

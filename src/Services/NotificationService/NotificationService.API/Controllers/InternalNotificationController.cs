@@ -42,6 +42,12 @@ public sealed class InternalNotificationController : ControllerBase
     public async Task<ActionResult<NotificationStatsResponse>> Stats(CancellationToken cancellationToken) =>
         Ok(await _notifications.GetStatsAsync(cancellationToken));
 
+    [HttpGet("dlq")]
+    public async Task<ActionResult<IReadOnlyList<DeadLetterNotificationDto>>> DeadLetters(
+        [FromQuery] int limit = 100,
+        CancellationToken cancellationToken = default) =>
+        Ok(await _notifications.GetDeadLettersAsync(limit, cancellationToken));
+
     [HttpGet("templates")]
     public async Task<ActionResult<IReadOnlyList<NotificationTemplateDto>>> Templates(CancellationToken cancellationToken) =>
         Ok(await _notifications.GetTemplatesAsync(cancellationToken));

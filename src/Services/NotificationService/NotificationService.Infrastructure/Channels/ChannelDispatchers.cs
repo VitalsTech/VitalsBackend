@@ -8,11 +8,16 @@ namespace NotificationService.Infrastructure.Channels;
 public sealed class PushChannelDispatcher : IChannelDispatcher
 {
     private readonly INotificationRepository _repo;
+    private readonly IIntegrationChannelClient _integration;
     private readonly ILogger<PushChannelDispatcher> _logger;
 
-    public PushChannelDispatcher(INotificationRepository repo, ILogger<PushChannelDispatcher> logger)
+    public PushChannelDispatcher(
+        INotificationRepository repo,
+        IIntegrationChannelClient integration,
+        ILogger<PushChannelDispatcher> logger)
     {
         _repo = repo;
+        _integration = integration;
         _logger = logger;
     }
 
@@ -34,89 +39,146 @@ public sealed class PushChannelDispatcher : IChannelDispatcher
             };
         }
 
+        string? lastReference = null;
         foreach (var token in tokens)
         {
+            var reference = await _integration.SendPushAsync(
+                userId,
+                token.Platform,
+                message.Subject ?? string.Empty,
+                message.Body,
+                cancellationToken).ConfigureAwait(false);
+
+            if (reference is not null)
+            {
+                lastReference = reference;
+                continue;
+            }
+
             _logger.LogInformation(
                 "Push stub -> user={UserId} platform={Platform} priority={Priority} title={Title}",
                 userId,
                 token.Platform,
                 priority,
                 message.Subject);
+            lastReference ??= $"push-{Guid.NewGuid():N}";
         }
 
         return new ChannelDispatchResult
         {
             Success = true,
-            ProviderMessageId = $"push-{Guid.NewGuid():N}"
+            ProviderMessageId = lastReference
         };
     }
 }
 
 public sealed class SmsChannelDispatcher : IChannelDispatcher
 {
+    private readonly IIntegrationChannelClient _integration;
     private readonly ILogger<SmsChannelDispatcher> _logger;
 
-    public SmsChannelDispatcher(ILogger<SmsChannelDispatcher> logger) => _logger = logger;
+    public SmsChannelDispatcher(IIntegrationChannelClient integration, ILogger<SmsChannelDispatcher> logger)
+    {
+        _integration = integration;
+        _logger = logger;
+    }
 
     public string Channel => "Sms";
 
-    public Task<ChannelDispatchResult> DispatchAsync(
+    public async Task<ChannelDispatchResult> DispatchAsync(
         Guid userId,
         RenderedMessage message,
         NotificationPriority priority,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("SMS stub via Integration Service -> user={UserId}: {Body}", userId, message.Body);
-        return Task.FromResult(new ChannelDispatchResult
+        var reference = await _integration.SendSmsAsync(userId, message.Body, cancellationToken).ConfigureAwait(false);
+        if (reference is null)
+        {
+            _logger.LogInformation("SMS stub via Integration Service -> user={UserId}: {Body}", userId, message.Body);
+            reference = $"sms-{Guid.NewGuid():N}";
+        }
+
+        return new ChannelDispatchResult
         {
             Success = true,
-            ProviderMessageId = $"sms-{Guid.NewGuid():N}"
-        });
+            ProviderMessageId = reference
+        };
     }
 }
 
 public sealed class EmailChannelDispatcher : IChannelDispatcher
 {
+    private readonly IIntegrationChannelClient _integration;
     private readonly ILogger<EmailChannelDispatcher> _logger;
 
-    public EmailChannelDispatcher(ILogger<EmailChannelDispatcher> logger) => _logger = logger;
+    public EmailChannelDispatcher(IIntegrationChannelClient integration, ILogger<EmailChannelDispatcher> logger)
+    {
+        _integration = integration;
+        _logger = logger;
+    }
 
     public string Channel => "Email";
 
-    public Task<ChannelDispatchResult> DispatchAsync(
+    public async Task<ChannelDispatchResult> DispatchAsync(
         Guid userId,
         RenderedMessage message,
         NotificationPriority priority,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Email stub via Integration Service -> user={UserId} subject={Subject}", userId, message.Subject);
-        return Task.FromResult(new ChannelDispatchResult
+        var reference = await _integration.SendEmailAsync(
+            userId,
+            message.Subject ?? string.Empty,
+            message.Body,
+            cancellationToken).ConfigureAwait(false);
+
+        if (reference is null)
+        {
+            _logger.LogInformation(
+                "Email stub via Integration Service -> user={UserId} subject={Subject}",
+                userId,
+                message.Subject);
+            reference = $"email-{Guid.NewGuid():N}";
+        }
+
+        return new ChannelDispatchResult
         {
             Success = true,
-            ProviderMessageId = $"email-{Guid.NewGuid():N}"
-        });
+            ProviderMessageId = reference
+        };
     }
 }
 
 public sealed class VoiceChannelDispatcher : IChannelDispatcher
 {
+    private readonly IIntegrationChannelClient _integration;
     private readonly ILogger<VoiceChannelDispatcher> _logger;
 
-    public VoiceChannelDispatcher(ILogger<VoiceChannelDispatcher> logger) => _logger = logger;
+    public VoiceChannelDispatcher(IIntegrationChannelClient integration, ILogger<VoiceChannelDispatcher> logger)
+    {
+        _integration = integration;
+        _logger = logger;
+    }
 
     public string Channel => "Voice";
 
-    public Task<ChannelDispatchResult> DispatchAsync(
+    public async Task<ChannelDispatchResult> DispatchAsync(
         Guid userId,
         RenderedMessage message,
         NotificationPriority priority,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogWarning("Voice call stub -> user={UserId}: {Body}", userId, message.Body);
-        return Task.FromResult(new ChannelDispatchResult
+        var urgency = priority == NotificationPriority.Critical ? 3 : 1;
+        var reference = await _integration.SendVoiceAsync(userId, message.Body, urgency, cancellationToken).ConfigureAwait(false);
+        if (reference is null)
+        {
+            _logger.LogWarning("Voice call stub -> user={UserId}: {Body}", userId, message.Body);
+            reference = $"voice-{Guid.NewGuid():N}";
+        }
+
+        return new ChannelDispatchResult
         {
             Success = true,
-            ProviderMessageId = $"voice-{Guid.NewGuid():N}"
-        });
+            ProviderMessageId = reference
+        };
     }
 }

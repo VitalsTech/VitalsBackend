@@ -49,6 +49,7 @@ public static class Program
         builder.Services.AddGatewayInfrastructure(builder.Configuration);
         builder.Services.AddFluentValidationAutoValidation();
         builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestDtoValidator>();
+        builder.Services.AddValidatorsFromAssemblyContaining<UserSearchRequestDtoValidator>();
 
         ConfigureJwt(builder);
         ConfigureCompression(builder);

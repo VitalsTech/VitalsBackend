@@ -22,6 +22,61 @@ namespace NotificationService.Infrastructure.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("NotificationService.Domain.Entities.DeadLetterNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("MovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OriginalDeliveryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("SourceEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Subject")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MovedAt");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("dead_letter_notifications", (string)null);
+                });
+
             modelBuilder.Entity("NotificationService.Domain.Entities.DevicePushToken", b =>
                 {
                     b.Property<Guid>("Id")

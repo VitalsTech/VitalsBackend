@@ -14,6 +14,13 @@ public sealed class MedicalRecordServiceOptions
     public string BaseUrl { get; set; } = "http://localhost:5210";
 }
 
+public sealed class UserServiceOptions
+{
+    public const string SectionName = "UserService";
+    public string BaseUrl { get; set; } = "http://localhost:5195";
+    public bool UseStubSchedule { get; set; } = true;
+}
+
 public sealed class KafkaOptions
 {
     public const string SectionName = "Kafka";
@@ -25,6 +32,7 @@ public sealed class KafkaOptions
     public string EmergencyRequiredTopic { get; set; } = "emergency_required";
     public string AutoResponseRequiredTopic { get; set; } = "auto_response_required";
     public string ConsumerGroupId { get; set; } = "routing-service";
+    public string ClientId { get; set; } = "routing-service";
 }
 
 public sealed class RoutingEngineOptions

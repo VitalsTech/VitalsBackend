@@ -21,6 +21,9 @@ public sealed class BackendServicesOptions
     public string ConsultationService { get; set; } = "http://localhost:5240";
     public string PrescriptionService { get; set; } = "http://localhost:5250";
     public string NotificationService { get; set; } = "http://localhost:5260";
+    public string PaymentService { get; set; } = "http://localhost:5280";
+    public string AnalyticsService { get; set; } = "http://localhost:5290";
+    public string QualityService { get; set; } = "http://localhost:5295";
 }
 
 public sealed class RateLimitingOptions
@@ -28,6 +31,7 @@ public sealed class RateLimitingOptions
     public const string SectionName = "RateLimiting";
 
     public string RedisConnectionString { get; set; } = "localhost:6379";
+    public bool UseInMemoryFallback { get; set; }
     public Dictionary<string, RateLimitPolicyOptions> Policies { get; set; } = new();
     public List<EndpointRateLimitRule> EndpointRules { get; set; } = [];
 }

@@ -16,5 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MedicalRecordService.Application\MedicalRecordService.Application.csproj" />
     <ProjectReference Include="..\MedicalRecordService.Domain\MedicalRecordService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.Messaging\Vitals.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.ObjectStorage\Vitals.ObjectStorage.csproj" />
   </ItemGroup>
 </Project>

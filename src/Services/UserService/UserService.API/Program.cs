@@ -10,12 +10,13 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using MicroElements.Swashbuckle.FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
+using Vitals.AspNetCore.Authentication;
 
 namespace UserService.API
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
 
             var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +35,7 @@ namespace UserService.API
             builder.Services.AddFluentValidationAutoValidation();
             builder.Services.AddValidatorsFromAssemblyContaining<CreateUserWithProfileRequestValidator>();
             builder.Services.AddFluentValidationRulesToSwagger();
+            builder.Services.AddVitalsAuthentication(builder.Configuration, builder.Environment);
 
             // Add Application Services
             builder.Services.AddScoped<IEncryptionService, EncryptionService>();
@@ -57,6 +59,8 @@ namespace UserService.API
                 dbContext.Database.Migrate();
             }
 
+            await DoctorScheduleSeeder.SeedAsync(app.Services);
+
             // Configure pipeline
             if (app.Environment.IsDevelopment())
             {
@@ -65,11 +69,13 @@ namespace UserService.API
             }
 
             app.UseHttpsRedirection();
+            app.UseAuthentication();
+            app.UseVitalsInternalServiceAuth();
             app.UseAuthorization();
             app.UseMiddleware<GlobalExceptionHandler>();
             app.MapControllers();
 
-            app.Run();
+            await app.RunAsync();
         }
     }
 }

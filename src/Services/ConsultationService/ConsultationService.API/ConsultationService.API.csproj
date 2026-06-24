@@ -16,5 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\ConsultationService.Application\ConsultationService.Application.csproj" />
     <ProjectReference Include="..\ConsultationService.Infrastructure\ConsultationService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.AspNetCore.Authentication\Vitals.AspNetCore.Authentication.csproj" />
   </ItemGroup>
 </Project>

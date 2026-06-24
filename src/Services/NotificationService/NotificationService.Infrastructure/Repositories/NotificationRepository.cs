@@ -129,4 +129,16 @@ public sealed class NotificationRepository : INotificationRepository
         _db.ProcessedEvents.RemoveRange(old);
         await _db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task SaveDeadLetterAsync(DeadLetterNotification entry, CancellationToken cancellationToken = default)
+    {
+        _db.DeadLetters.Add(entry);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DeadLetterNotification>> GetDeadLettersAsync(int limit, CancellationToken cancellationToken = default) =>
+        await _db.DeadLetters.AsNoTracking()
+            .OrderByDescending(x => x.MovedAt)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
 }

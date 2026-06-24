@@ -1,47 +1,5 @@
-services:
-  redis:
-    image: redis:7-alpine
-    container_name: vitals-redis
-    ports:
-      - "6379:6379"
-    networks:
-      - vitals-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+# Per-service compose перенесён в корень репозитория.
+# Запуск всего бэкенда: docker compose -f ../../../docker-compose.yml up --build -d
 
-  apigateway.api:
-    build:
-      context: .
-      dockerfile: ApiGateway.API/Dockerfile
-    container_name: vitals-apigateway
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://+:80
-      - RateLimiting__RedisConnectionString=redis:6379
-      - Jwt__JwksUrl=http://authservice.api:80/internal/jwks
-      - Services__AuthService=http://authservice.api:80
-      - Services__UserService=http://userservice.api:80
-      - Services__MedicalRecordService=http://medicalrecordservice.api:80
-      - Services__AITriageService=http://aitriage.api:80
-      - Services__ConsultationService=http://consultation.api:80
-      - Services__PrescriptionService=http://prescription.api:80
-      - ReverseProxy__Clusters__auth-cluster__Destinations__auth__Address=http://authservice.api:80/
-      - ReverseProxy__Clusters__users-cluster__Destinations__users__Address=http://userservice.api:80/
-      - ReverseProxy__Clusters__medical-cluster__Destinations__medical__Address=http://medicalrecordservice.api:80/
-      - ReverseProxy__Clusters__triage-cluster__Destinations__triage__Address=http://aitriage.api:80/
-      - ReverseProxy__Clusters__consultation-cluster__Destinations__consultation__Address=http://consultation.api:80/
-      - ReverseProxy__Clusters__prescription-cluster__Destinations__prescription__Address=http://prescription.api:80/
-    ports:
-      - "5000:80"
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - vitals-network
-
-networks:
-  vitals-network:
-    driver: bridge
+include:
+  - path: ../../../docker-compose.yml

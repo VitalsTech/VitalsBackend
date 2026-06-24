@@ -1,8 +1,5 @@
-using System.Security.Claims;
-using System.Security.Cryptography;
 using ConsultationService.API.Middleware;
 using ConsultationService.API.Validators;
-using ConsultationService.Application.Options;
 using ConsultationService.Infrastructure;
 using ConsultationService.Infrastructure.Data;
 using ConsultationService.Infrastructure.Hubs;
@@ -10,8 +7,8 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Vitals.AspNetCore.Authentication;
 
 namespace ConsultationService.API;
 
@@ -46,12 +43,24 @@ public static class Program
             });
         });
 
-        builder.Services.Configure<JwtValidationOptions>(builder.Configuration.GetSection(JwtValidationOptions.SectionName));
         builder.Services.AddConsultationInfrastructure(builder.Configuration);
         builder.Services.AddFluentValidationAutoValidation();
         builder.Services.AddValidatorsFromAssemblyContaining<CreateConsultationRequestValidator>();
+        builder.Services.AddVitalsAuthentication(builder.Configuration, builder.Environment);
+        builder.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            var prior = options.Events?.OnMessageReceived;
+            options.Events ??= new JwtBearerEvents();
+            options.Events.OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/consultation"))
+                    context.Token = accessToken;
 
-        ConfigureJwt(builder);
+                return prior?.Invoke(context) ?? Task.CompletedTask;
+            };
+        });
 
         var app = builder.Build();
 
@@ -67,76 +76,10 @@ public static class Program
         app.UseMiddleware<GlobalExceptionHandler>();
         app.UseHttpsRedirection();
         app.UseAuthentication();
+        app.UseVitalsInternalServiceAuth();
         app.UseAuthorization();
         app.MapControllers();
         app.MapHub<ConsultationHub>("/hubs/consultation");
         await app.RunAsync();
     }
-
-    private static void ConfigureJwt(WebApplicationBuilder builder)
-    {
-        var jwt = builder.Configuration.GetSection(JwtValidationOptions.SectionName).Get<JwtValidationOptions>()
-            ?? new JwtValidationOptions();
-
-        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                options.Events = new JwtBearerEvents
-                {
-                    OnMessageReceived = context =>
-                    {
-                        var accessToken = context.Request.Query["access_token"];
-                        var path = context.HttpContext.Request.Path;
-                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/consultation"))
-                            context.Token = accessToken;
-                        return Task.CompletedTask;
-                    }
-                };
-
-                if (!string.IsNullOrWhiteSpace(jwt.JwksUrl))
-                {
-                    try
-                    {
-                        using var client = new HttpClient();
-                        var json = client.GetStringAsync(jwt.JwksUrl).GetAwaiter().GetResult();
-                        var set = new JsonWebKeySet(json);
-                        var key = set.GetSigningKeys().First();
-                        options.TokenValidationParameters = CreateParameters(jwt, key);
-                        return;
-                    }
-                    catch when (builder.Environment.IsDevelopment())
-                    {
-                        // fallback below
-                    }
-                }
-
-                if (builder.Environment.IsDevelopment())
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = false,
-                        ValidateAudience = false,
-                        ValidateIssuerSigningKey = false,
-                        ValidateLifetime = false,
-                        SignatureValidator = (token, _) => new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(token)
-                    };
-                }
-            });
-
-        builder.Services.AddAuthorization();
-    }
-
-    private static TokenValidationParameters CreateParameters(JwtValidationOptions jwt, SecurityKey key) => new()
-    {
-        ValidateIssuer = true,
-        ValidIssuer = jwt.Issuer,
-        ValidateAudience = true,
-        ValidAudience = jwt.Audience,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = key,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromSeconds(30),
-        NameClaimType = "sub",
-        RoleClaimType = ClaimTypes.Role
-    };
 }

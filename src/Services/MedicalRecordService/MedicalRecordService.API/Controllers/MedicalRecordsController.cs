@@ -16,17 +16,20 @@ public class MedicalRecordsController : ControllerBase
     private readonly IMedicalEventService _events;
     private readonly IPatientRecordQueryService _queries;
     private readonly IAccessGrantService _grants;
+    private readonly IPatientAttachmentService _attachments;
     private readonly IOptions<JwtValidationOptions> _jwtOptions;
 
     public MedicalRecordsController(
         IMedicalEventService events,
         IPatientRecordQueryService queries,
         IAccessGrantService grants,
+        IPatientAttachmentService attachments,
         IOptions<JwtValidationOptions> jwtOptions)
     {
         _events = events;
         _queries = queries;
         _grants = grants;
+        _attachments = attachments;
         _jwtOptions = jwtOptions;
     }
 
@@ -83,5 +86,33 @@ public class MedicalRecordsController : ControllerBase
         var actor = ActorContextFactory.FromHttpContext(HttpContext, _jwtOptions);
         await _grants.RevokeGrantAsync(patientId, grantId, actor, cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("attachments")]
+    [RequestSizeLimit(52_428_800)]
+    public async Task<ActionResult<PatientAttachmentDto>> UploadAttachment(
+        Guid patientId,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        var actor = ActorContextFactory.FromHttpContext(HttpContext, _jwtOptions);
+        await using var stream = file.OpenReadStream();
+        var result = await _attachments.UploadAsync(
+            patientId,
+            file.FileName,
+            stream,
+            file.ContentType,
+            actor,
+            cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("attachments")]
+    public async Task<ActionResult<IReadOnlyList<PatientAttachmentDto>>> ListAttachments(
+        Guid patientId,
+        CancellationToken cancellationToken)
+    {
+        var actor = ActorContextFactory.FromHttpContext(HttpContext, _jwtOptions);
+        return Ok(await _attachments.ListAsync(patientId, actor, cancellationToken));
     }
 }

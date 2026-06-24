@@ -56,3 +56,10 @@ public interface IAuditLogRepository
     Task AddAsync(AuditLogEntry entry, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+
+public interface IPatientAttachmentRepository
+{
+    Task AddAsync(PatientAttachment attachment, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PatientAttachment>> GetByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+    Task SaveChangesAsync(CancellationToken cancellationToken = default);
+}

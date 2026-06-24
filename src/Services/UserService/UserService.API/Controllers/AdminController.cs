@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Common;
 using UserService.Application.Interfaces;
 
@@ -6,6 +7,7 @@ namespace UserService.API.Controllers
 {
     [ApiController]
     [Route("api/admin")]
+    [Authorize(Policy = "InternalService")]
     public class AdminController : ControllerBase
     {
         private readonly IAdminUserService _adminUserService;

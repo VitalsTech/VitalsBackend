@@ -60,3 +60,19 @@ public sealed class UserNotificationPreference
     public bool VoiceEnabled { get; set; } = true;
     public DateTime UpdatedAt { get; set; }
 }
+
+public sealed class DeadLetterNotification
+{
+    public Guid Id { get; set; }
+    public Guid OriginalDeliveryId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid SourceEventId { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Channel { get; set; } = string.Empty;
+    public string? Subject { get; set; }
+    public string Body { get; set; } = string.Empty;
+    public string? ErrorMessage { get; set; }
+    public int AttemptCount { get; set; }
+    public string Priority { get; set; } = string.Empty;
+    public DateTime MovedAt { get; set; }
+}
