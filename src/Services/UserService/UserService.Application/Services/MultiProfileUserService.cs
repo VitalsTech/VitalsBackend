@@ -31,15 +31,50 @@ namespace UserService.Application.Services
         private readonly IUserRepository _userRepository;
         private readonly IMapper _mapper;
         private readonly IEncryptionService _encryptionService;
+        private readonly IRoleRepository _roleRepository;
+        private readonly IUserRoleRepository _userRoleRepository;
 
         public MultiProfileUserService(
             IUserRepository userRepository,
             IMapper mapper,
-            IEncryptionService encryptionService)
+            IEncryptionService encryptionService,
+            IRoleRepository roleRepository,
+            IUserRoleRepository userRoleRepository)
         {
             _userRepository = userRepository;
             _mapper = mapper;
             _encryptionService = encryptionService;
+            _roleRepository = roleRepository;
+            _userRoleRepository = userRoleRepository;
+        }
+
+        private static string? DefaultRoleNameFor(ProfileType profileType) => profileType switch
+        {
+            ProfileType.Patient => "Patient",
+            ProfileType.Doctor => "Doctor",
+            ProfileType.Organization => "ClinicAdmin",
+            _ => null
+        };
+
+        private async Task AssignDefaultRoleAsync(Guid userId, Profile profile)
+        {
+            var roleName = DefaultRoleNameFor(profile.ProfileType);
+            if (roleName is null)
+                return;
+
+            if (await _userRoleRepository.HasRoleAsync(profile.Id, roleName))
+                return;
+
+            var role = await _roleRepository.GetByNameAsync(roleName);
+            if (role is null)
+                return;
+
+            await _userRoleRepository.AddAsync(new UserRole
+            {
+                UserId = userId,
+                RoleId = role.Id,
+                ProfileId = profile.Id
+            });
         }
 
         public async Task<UserWithProfilesDto> CreateUserWithProfileAsync(CreateUserWithProfileRequest request)
@@ -87,6 +122,9 @@ namespace UserService.Application.Services
 
             profile.IsActive = true;
             await _userRepository.AddProfileAsync(profile);
+            await _userRepository.SaveChangesAsync();
+
+            await AssignDefaultRoleAsync(user.Id, profile);
             await _userRepository.SaveChangesAsync();
 
             return await GetUserWithProfilesAsync(user.PublicId);
@@ -152,6 +190,9 @@ namespace UserService.Application.Services
             };
 
             await _userRepository.AddProfileAsync(profile);
+            await _userRepository.SaveChangesAsync();
+
+            await AssignDefaultRoleAsync(user.Id, profile);
             await _userRepository.SaveChangesAsync();
 
             return profile;

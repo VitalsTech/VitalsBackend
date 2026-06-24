@@ -131,7 +131,7 @@ public sealed class PrescriptionAppService : IPrescriptionService
         bool confirmWarnings,
         CancellationToken cancellationToken = default)
     {
-        var prescription = await _repo.GetByIdAsync(prescriptionId, cancellationToken)
+        var prescription = await _repo.GetByIdForUpdateAsync(prescriptionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Prescription {prescriptionId} not found.");
 
         var request = ToCreateRequest(prescription);

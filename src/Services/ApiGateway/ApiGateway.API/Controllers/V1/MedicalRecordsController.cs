@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ApiGateway.Application.DTOs.MedicalRecords;
 using ApiGateway.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -15,8 +16,33 @@ public sealed class MedicalRecordsController : GatewayControllerBase
     public MedicalRecordsController(IBackendForwarder backend) => _backend = backend;
 
     [HttpPost("events")]
-    public Task<IActionResult> AppendEvent(Guid patientId, [FromBody] AppendEventRequestDto request, CancellationToken cancellationToken) =>
-        Forward(_backend.ForwardJsonAsync("medical", HttpMethod.Post, $"api/medical-records/patients/{patientId}/events", ForwardContext, request, cancellationToken), cancellationToken);
+    public Task<IActionResult> AppendEvent(Guid patientId, [FromBody] AppendEventRequestDto request, CancellationToken cancellationToken)
+    {
+        var backendRequest = new
+        {
+            eventId = Guid.NewGuid(),
+            eventType = request.EventType,
+            sourceService = request.SourceService,
+            payload = ParsePayload(request.PayloadJson)
+        };
+        return Forward(_backend.ForwardJsonAsync("medical", HttpMethod.Post, $"api/medical-records/patients/{patientId}/events", ForwardContext, backendRequest, cancellationToken), cancellationToken);
+    }
+
+    private static JsonElement ParsePayload(string payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+            return JsonSerializer.SerializeToElement(new { });
+
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.SerializeToElement(payloadJson);
+        }
+    }
 
     [HttpGet("history")]
     public Task<IActionResult> GetHistory(

@@ -22,6 +22,10 @@ public abstract class KafkaConsumerHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Yield immediately so the synchronous, blocking consume loop below never
+        // runs on the host startup thread (otherwise it blocks Kestrel from binding).
+        await Task.Yield();
+
         if (!_options.Enabled)
         {
             _logger.LogInformation(
@@ -37,7 +41,8 @@ public abstract class KafkaConsumerHostedService : BackgroundService
             GroupId = _options.ConsumerGroupId,
             AutoOffsetReset = AutoOffsetReset.Earliest,
             EnableAutoCommit = false,
-            ClientId = _options.ClientId
+            ClientId = _options.ClientId,
+            AllowAutoCreateTopics = true
         };
 
         using var consumer = new ConsumerBuilder<string, string>(config).Build();
