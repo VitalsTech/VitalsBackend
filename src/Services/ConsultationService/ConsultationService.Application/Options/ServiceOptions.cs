@@ -24,6 +24,7 @@ public sealed class KafkaOptions
     public string ConsultationCompletedTopic { get; set; } = "consultation.completed";
     public string ConsultationEmergencyTopic { get; set; } = "consultation.emergency";
     public string ConsumerGroupId { get; set; } = "consultation-service";
+    public string ClientId { get; set; } = "consultation-service";
 }
 
 public sealed class RedisOptions
@@ -49,5 +50,11 @@ public sealed class SfuOptions
 {
     public const string SectionName = "Sfu";
     public bool UseStub { get; set; } = true;
-    public string ServerUrl { get; set; } = "wss://sfu-stub.vitals.local";
+    public string Provider { get; set; } = "LiveKit";
+    public string ServerUrl { get; set; } = "wss://livekit.vitals.local";
+    public string? ApiUrl { get; set; }
+    public string? ApiKey { get; set; }
+    public string? ApiSecret { get; set; }
+    public string? RoomCreateUrl { get; set; }
+    public string? RoomCloseUrl { get; set; }
 }

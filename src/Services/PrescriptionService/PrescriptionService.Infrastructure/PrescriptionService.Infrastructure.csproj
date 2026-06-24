@@ -21,5 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PrescriptionService.Application\PrescriptionService.Application.csproj" />
     <ProjectReference Include="..\PrescriptionService.Domain\PrescriptionService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.Messaging\Vitals.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.ESignature\Vitals.ESignature.csproj" />
   </ItemGroup>
 </Project>

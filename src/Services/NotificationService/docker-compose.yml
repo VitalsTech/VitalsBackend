@@ -1,44 +1,5 @@
-services:
-  postgres-notification:
-    image: postgres:15
-    container_name: vitals-postgres-notification
-    environment:
-      POSTGRES_DB: NotificationDb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-    ports:
-      - "5439:5432"
-    volumes:
-      - postgres-notification-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - vitals-network
+# Per-service compose перенесён в корень репозитория.
+# Запуск всего бэкенда: docker compose -f ../../../docker-compose.yml up --build -d
 
-  notification.api:
-    build:
-      context: .
-      dockerfile: NotificationService.API/Dockerfile
-    container_name: vitals-notification
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://+:80
-      - ConnectionStrings__DefaultConnection=Host=postgres-notification;Port=5432;Database=NotificationDb;Username=postgres;Password=postgres123
-      - Jwt__JwksUrl=http://authservice.api:80/internal/jwks
-    ports:
-      - "5008:80"
-    depends_on:
-      postgres-notification:
-        condition: service_healthy
-    networks:
-      - vitals-network
-
-volumes:
-  postgres-notification-data:
-
-networks:
-  vitals-network:
-    driver: bridge
+include:
+  - path: ../../../docker-compose.yml

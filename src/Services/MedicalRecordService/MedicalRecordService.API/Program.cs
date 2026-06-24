@@ -1,16 +1,12 @@
-using System.Security.Claims;
-using System.Security.Cryptography;
 using MedicalRecordService.API.Middleware;
 using MedicalRecordService.API.Validators;
-using MedicalRecordService.Application.Options;
 using MedicalRecordService.Infrastructure;
 using MedicalRecordService.Infrastructure.Data;
 using FluentValidation;
 using FluentValidation.AspNetCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Vitals.AspNetCore.Authentication;
 
 namespace MedicalRecordService.API;
 
@@ -45,19 +41,15 @@ public static class Program
             });
         });
 
-        builder.Services.Configure<JwtValidationOptions>(builder.Configuration.GetSection(JwtValidationOptions.SectionName));
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddFluentValidationAutoValidation();
         builder.Services.AddValidatorsFromAssemblyContaining<AppendEventRequestValidator>();
-
-        ConfigureJwtAuthentication(builder);
+        builder.Services.AddVitalsAuthentication(builder.Configuration, builder.Environment);
 
         var app = builder.Build();
 
         using (var scope = app.Services.CreateScope())
-        {
             scope.ServiceProvider.GetRequiredService<MedicalRecordDbContext>().Database.Migrate();
-        }
 
         if (app.Environment.IsDevelopment())
         {
@@ -68,72 +60,9 @@ public static class Program
         app.UseMiddleware<GlobalExceptionHandler>();
         app.UseHttpsRedirection();
         app.UseAuthentication();
+        app.UseVitalsInternalServiceAuth();
         app.UseAuthorization();
         app.MapControllers();
         app.Run();
     }
-
-    private static void ConfigureJwtAuthentication(WebApplicationBuilder builder)
-    {
-        var jwtSection = builder.Configuration.GetSection(JwtValidationOptions.SectionName);
-        var jwt = jwtSection.Get<JwtValidationOptions>() ?? new JwtValidationOptions();
-
-        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                if (!string.IsNullOrWhiteSpace(jwt.RsaPublicKeyPem))
-                {
-                    var rsa = RSA.Create();
-                    rsa.ImportFromPem(jwt.RsaPublicKeyPem);
-                    options.TokenValidationParameters = CreateParameters(jwt, new RsaSecurityKey(rsa));
-                }
-                else if (builder.Environment.IsDevelopment())
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = false,
-                        ValidateAudience = false,
-                        ValidateIssuerSigningKey = false,
-                        ValidateLifetime = false,
-                        SignatureValidator = (token, _) => new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(token)
-                    };
-                }
-
-                options.Events = new JwtBearerEvents
-                {
-                    OnMessageReceived = context =>
-                    {
-                        if (context.Request.Path.StartsWithSegments("/internal") &&
-                            jwt.AllowDevelopmentHeaderFallback &&
-                            context.Request.Headers.ContainsKey("X-Service-Name"))
-                        {
-                            context.Principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
-                            {
-                                new Claim("sub", context.Request.Headers["X-User-Id"].FirstOrDefault() ?? Guid.Empty.ToString()),
-                                new Claim(ClaimTypes.Role, "Service")
-                            }, "Development"));
-                            context.Success();
-                        }
-
-                        return Task.CompletedTask;
-                    }
-                };
-            });
-
-        builder.Services.AddAuthorization();
-    }
-
-    private static TokenValidationParameters CreateParameters(JwtValidationOptions jwt, SecurityKey key) => new()
-    {
-        ValidateIssuer = true,
-        ValidIssuer = jwt.Issuer,
-        ValidateAudience = true,
-        ValidAudience = jwt.Audience,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = key,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromSeconds(30),
-        NameClaimType = "sub",
-        RoleClaimType = ClaimTypes.Role
-    };
 }

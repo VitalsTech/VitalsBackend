@@ -142,3 +142,77 @@ public sealed class StubESignatureService : IESignatureService
         return Task.FromResult(signature);
     }
 }
+
+public sealed class IntegrationEgiszClient : IEgiszClient
+{
+    private readonly HttpClient _http;
+    private readonly IntegrationServiceOptions _options;
+    private readonly ILogger<IntegrationEgiszClient> _logger;
+
+    public IntegrationEgiszClient(
+        HttpClient http,
+        IOptions<IntegrationServiceOptions> options,
+        ILogger<IntegrationEgiszClient> logger)
+    {
+        _http = http;
+        _options = options.Value;
+        _logger = logger;
+        if (_http.BaseAddress is null && !string.IsNullOrWhiteSpace(_options.BaseUrl))
+            _http.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/");
+    }
+
+    public async Task<EgiszPreferentialCheckResult> CheckPreferentialEligibilityAsync(
+        Guid patientId,
+        string? preferentialCategory,
+        IReadOnlyList<string> atcCodes,
+        CancellationToken cancellationToken = default)
+    {
+        if (_options.UseStub)
+        {
+            var eligible = !string.IsNullOrWhiteSpace(preferentialCategory);
+            return new EgiszPreferentialCheckResult
+            {
+                IsEligible = eligible,
+                RejectionReason = eligible ? null : "Preferential category is required",
+                EgiszReference = eligible ? $"egisz-stub-{Guid.NewGuid():N}" : null
+            };
+        }
+
+        var response = await _http.PostAsJsonAsync(
+            "internal/integration/egisz/preferential/check",
+            new
+            {
+                PatientId = patientId,
+                PreferentialCategory = preferentialCategory,
+                AtcCodes = atcCodes
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("EGISZ check failed for patient {PatientId}: {Status}", patientId, response.StatusCode);
+            return new EgiszPreferentialCheckResult
+            {
+                IsEligible = false,
+                RejectionReason = "EGISZ service unavailable"
+            };
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<EgiszResponse>(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return new EgiszPreferentialCheckResult
+        {
+            IsEligible = payload?.IsEligible ?? false,
+            RejectionReason = payload?.RejectionReason,
+            EgiszReference = payload?.EgiszReference
+        };
+    }
+
+    private sealed class EgiszResponse
+    {
+        public bool IsEligible { get; set; }
+        public string? RejectionReason { get; set; }
+        public string? EgiszReference { get; set; }
+    }
+}

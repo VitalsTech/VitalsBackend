@@ -76,6 +76,27 @@ public sealed class EventChannelRouter : IEventChannelRouter
             ("payment.failed.sms", "Sms"),
             ("payment.failed.email", "Email")
         ]),
+        ["payment.completed"] = ("payments", [
+            ("payment.completed.push", "Push"),
+            ("payment.completed.email", "Email")
+        ]),
+        ["consultation.completed"] = ("consultations", [
+            ("consultation.completed.patient.push", "Push"),
+            ("consultation.completed.patient.email", "Email"),
+            ("consultation.completed.doctor.push", "Push")
+        ]),
+        ["prescription.expired"] = ("prescriptions", [
+            ("prescription.expired.push", "Push"),
+            ("prescription.expired.email", "Email")
+        ]),
+        ["emergency.required"] = ("system", [
+            ("emergency.required.push", "Push"),
+            ("emergency.required.sms", "Sms"),
+            ("emergency.required.voice", "Voice")
+        ]),
+        ["triage.completed"] = ("system", [
+            ("triage.completed.push", "Push")
+        ]),
         ["system.maintenance"] = ("system", [
             ("system.maintenance.push", "Push"),
             ("system.maintenance.email", "Email")

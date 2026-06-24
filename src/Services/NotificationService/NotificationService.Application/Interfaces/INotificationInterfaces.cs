@@ -21,6 +21,8 @@ public interface INotificationRepository
     Task SavePreferenceAsync(UserNotificationPreference preference, CancellationToken cancellationToken = default);
     Task<NotificationStatsResponse> GetStatsAsync(DateTime since, CancellationToken cancellationToken = default);
     Task CleanupOldProcessedEventsAsync(DateTime olderThan, CancellationToken cancellationToken = default);
+    Task SaveDeadLetterAsync(DeadLetterNotification entry, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DeadLetterNotification>> GetDeadLettersAsync(int limit, CancellationToken cancellationToken = default);
 }
 
 public interface ITemplateRenderer
@@ -63,4 +65,5 @@ public interface INotificationService
     Task<IReadOnlyList<UserPreferenceDto>> GetPreferencesAsync(Guid userId, CancellationToken cancellationToken = default);
     Task UpdatePreferenceAsync(Guid userId, UserPreferenceDto preference, CancellationToken cancellationToken = default);
     Task<NotificationStatsResponse> GetStatsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DeadLetterNotificationDto>> GetDeadLettersAsync(int limit, CancellationToken cancellationToken = default);
 }

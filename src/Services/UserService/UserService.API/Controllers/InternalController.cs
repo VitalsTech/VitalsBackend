@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Common;
 using UserService.Application.Interfaces;
 using UserService.Application.Services;
@@ -8,17 +9,21 @@ namespace UserService.API.Controllers
 {
     [ApiController]
     [Route("internal")]
+    [Authorize(Policy = "InternalService")]
     internal class InternalController : ControllerBase
     {
         private readonly IMultiProfileUserService _multiProfileUserService;
         private readonly IPermissionService _permissionService;
+        private readonly IDoctorScheduleService _doctorSchedule;
 
         public InternalController(
             IMultiProfileUserService multiProfileUserService,
-            IPermissionService permissionService)
+            IPermissionService permissionService,
+            IDoctorScheduleService doctorSchedule)
         {
             _multiProfileUserService = multiProfileUserService;
             _permissionService = permissionService;
+            _doctorSchedule = doctorSchedule;
         }
 
         // Получение пользователя по телефону (возвращает все профили)
@@ -89,6 +94,18 @@ namespace UserService.API.Controllers
                 return NotFound("No active profile found");
 
             return Ok(activeProfile);
+        }
+
+        [HttpGet("doctors/find-available")]
+        public async Task<IActionResult> FindAvailableDoctor(
+            [FromQuery] string specialty,
+            [FromQuery] int urgencyLevel = 3,
+            CancellationToken cancellationToken = default)
+        {
+            var doctor = await _doctorSchedule.FindAvailableDoctorAsync(specialty, urgencyLevel, cancellationToken);
+            if (doctor is null)
+                return NotFound();
+            return Ok(doctor);
         }
     }
 }

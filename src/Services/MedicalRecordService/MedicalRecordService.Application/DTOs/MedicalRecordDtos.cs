@@ -121,3 +121,15 @@ public sealed class ActorContext
     public string? IpAddress { get; set; }
     public string? SessionId { get; set; }
 }
+
+public sealed class PatientAttachmentDto
+{
+    public Guid Id { get; set; }
+    public Guid PatientId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string? CdnUrl { get; set; }
+    public long SizeBytes { get; set; }
+    public DateTime UploadedAt { get; set; }
+}

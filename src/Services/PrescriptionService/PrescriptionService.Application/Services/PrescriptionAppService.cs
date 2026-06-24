@@ -21,6 +21,7 @@ public sealed class PrescriptionAppService : IPrescriptionService
     private readonly IPrescriptionQrService _qr;
     private readonly IPatientInstructionGenerator _instructions;
     private readonly IPrescriptionEventPublisher _publisher;
+    private readonly IEgiszClient _egisz;
     private readonly KafkaOptions _kafka;
     private readonly PrescriptionOptions _options;
     private readonly ILogger<PrescriptionAppService> _logger;
@@ -36,6 +37,7 @@ public sealed class PrescriptionAppService : IPrescriptionService
         IPrescriptionQrService qr,
         IPatientInstructionGenerator instructions,
         IPrescriptionEventPublisher publisher,
+        IEgiszClient egisz,
         IOptions<KafkaOptions> kafka,
         IOptions<PrescriptionOptions> options,
         ILogger<PrescriptionAppService> logger)
@@ -50,6 +52,7 @@ public sealed class PrescriptionAppService : IPrescriptionService
         _qr = qr;
         _instructions = instructions;
         _publisher = publisher;
+        _egisz = egisz;
         _kafka = kafka.Value;
         _options = options.Value;
         _logger = logger;
@@ -74,6 +77,18 @@ public sealed class PrescriptionAppService : IPrescriptionService
 
         if (validation.Outcome == ValidationOutcome.RequiresConfirmation.ToString() && !request.ConfirmWarnings)
             throw new InvalidOperationException("Prescription requires doctor confirmation of warnings.");
+
+        if (request.IsPreferential)
+        {
+            var egiszCheck = await _egisz.CheckPreferentialEligibilityAsync(
+                request.PatientId,
+                request.PreferentialCategory,
+                request.Medications.Select(m => m.AtcCode).ToList(),
+                cancellationToken).ConfigureAwait(false);
+
+            if (!egiszCheck.IsEligible)
+                throw new InvalidOperationException(egiszCheck.RejectionReason ?? "Patient is not eligible for preferential prescription.");
+        }
 
         var now = DateTime.UtcNow;
         var validityDays = request.IsPreferential

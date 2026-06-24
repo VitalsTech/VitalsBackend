@@ -1,43 +1,5 @@
-services:
-  postgres-medical:
-    image: postgres:15
-    container_name: vitals-postgres-medical
-    environment:
-      POSTGRES_DB: MedicalRecordDb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-    ports:
-      - "5434:5432"
-    volumes:
-      - postgres-medical-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - vitals-network
+# Per-service compose перенесён в корень репозитория.
+# Запуск всего бэкенда: docker compose -f ../../../docker-compose.yml up --build -d
 
-  medicalrecordservice.api:
-    build:
-      context: .
-      dockerfile: MedicalRecordService.API/Dockerfile
-    container_name: vitals-medical-record
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://+:80
-      - ConnectionStrings__DefaultConnection=Host=postgres-medical;Port=5432;Database=MedicalRecordDb;Username=postgres;Password=postgres123
-    ports:
-      - "5003:80"
-    depends_on:
-      postgres-medical:
-        condition: service_healthy
-    networks:
-      - vitals-network
-
-volumes:
-  postgres-medical-data:
-
-networks:
-  vitals-network:
-    driver: bridge
+include:
+  - path: ../../../docker-compose.yml

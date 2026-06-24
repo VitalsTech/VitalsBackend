@@ -18,19 +18,45 @@ public static class DependencyInjection
         services.Configure<BackendServicesOptions>(configuration.GetSection(BackendServicesOptions.SectionName));
         services.Configure<RateLimitingOptions>(configuration.GetSection(RateLimitingOptions.SectionName));
 
+        var servicesOptions = configuration.GetSection(BackendServicesOptions.SectionName).Get<BackendServicesOptions>()
+            ?? new BackendServicesOptions();
         var rateLimit = configuration.GetSection(RateLimitingOptions.SectionName).Get<RateLimitingOptions>()
             ?? new RateLimitingOptions();
 
-        services.AddSingleton<IConnectionMultiplexer>(_ =>
-            ConnectionMultiplexer.Connect(rateLimit.RedisConnectionString));
+        RegisterRateLimiting(services, rateLimit);
 
-        services.AddSingleton<IRateLimitStore, RedisSlidingWindowRateLimitStore>();
-        services.AddSingleton<RateLimitPolicyResolver>();
         services.AddSingleton<JwtSigningKeyProvider>();
 
         services.AddHttpClient("jwks");
         services.AddHttpClient<IAuthBackendClient, AuthBackendClient>();
+        services.AddSingleton<IBackendForwarder, BackendForwarder>();
+
+        BackendHttpClientRegistration.AddBackendClient(services, "auth-service", servicesOptions.AuthService);
+        BackendHttpClientRegistration.AddBackendClient(services, "user-service", servicesOptions.UserService);
+        BackendHttpClientRegistration.AddBackendClient(services, "medical-record-service", servicesOptions.MedicalRecordService);
+        BackendHttpClientRegistration.AddBackendClient(services, "ai-triage-service", servicesOptions.AITriageService);
+        BackendHttpClientRegistration.AddBackendClient(services, "consultation-service", servicesOptions.ConsultationService);
+        BackendHttpClientRegistration.AddBackendClient(services, "prescription-service", servicesOptions.PrescriptionService);
+        BackendHttpClientRegistration.AddBackendClient(services, "notification-service", servicesOptions.NotificationService);
+        BackendHttpClientRegistration.AddBackendClient(services, "payment-service", servicesOptions.PaymentService);
+        BackendHttpClientRegistration.AddBackendClient(services, "analytics-service", servicesOptions.AnalyticsService);
+        BackendHttpClientRegistration.AddBackendClient(services, "quality-service", servicesOptions.QualityService);
 
         return services;
+    }
+
+    private static void RegisterRateLimiting(IServiceCollection services, RateLimitingOptions rateLimit)
+    {
+        services.AddSingleton<RateLimitPolicyResolver>();
+
+        if (rateLimit.UseInMemoryFallback)
+        {
+            services.AddSingleton<IRateLimitStore, InMemorySlidingWindowRateLimitStore>();
+            return;
+        }
+
+        services.AddSingleton<IConnectionMultiplexer>(_ =>
+            ConnectionMultiplexer.Connect(rateLimit.RedisConnectionString));
+        services.AddSingleton<IRateLimitStore, RedisSlidingWindowRateLimitStore>();
     }
 }

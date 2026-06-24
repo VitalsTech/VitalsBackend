@@ -10,6 +10,7 @@ using RoutingService.Infrastructure.Scheduling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Vitals.Messaging;
 
 namespace RoutingService.Infrastructure;
 
@@ -22,6 +23,14 @@ public static class DependencyInjection
         services.Configure<KafkaOptions>(configuration.GetSection(KafkaOptions.SectionName));
         services.Configure<RoutingEngineOptions>(configuration.GetSection(RoutingEngineOptions.SectionName));
         services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
+        services.AddVitalsKafka(configuration, options =>
+        {
+            var kafka = configuration.GetSection(KafkaOptions.SectionName).Get<KafkaOptions>() ?? new KafkaOptions();
+            options.Enabled = kafka.Enabled;
+            options.BootstrapServers = kafka.BootstrapServers;
+            options.ConsumerGroupId = kafka.ConsumerGroupId;
+            options.ClientId = kafka.ClientId;
+        });
 
         services.AddDbContext<RoutingDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
@@ -29,9 +38,9 @@ public static class DependencyInjection
         services.AddScoped<IRoutingDecisionRepository, RoutingDecisionRepository>();
         services.AddScoped<IPatientRouteRepository, PatientRouteRepository>();
         services.AddSingleton<IRoutingEngine, RuleBasedRoutingEngine>();
-        services.AddSingleton<IDoctorScheduler, StubDoctorScheduler>();
+        services.AddDoctorScheduler(configuration);
         services.AddScoped<IRoutingOrchestrator, RoutingOrchestrator>();
-        services.AddSingleton<IRoutingEventPublisher, LoggingRoutingEventPublisher>();
+        services.AddSingleton<IRoutingEventPublisher, KafkaRoutingEventPublisher>();
         services.AddHostedService<TriageCompletedConsumerHostedService>();
 
         services.AddHttpClient<IMedicalRecordContextClient, MedicalRecordContextClient>();

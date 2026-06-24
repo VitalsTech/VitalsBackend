@@ -1,39 +1,48 @@
-using RoutingService.Application.Interfaces;
-using RoutingService.Application.Options;
-using Microsoft.Extensions.Hosting;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RoutingService.Application.DTOs;
+using RoutingService.Application.Interfaces;
+using RoutingService.Application.Options;
+using Vitals.Messaging;
 
 namespace RoutingService.Infrastructure.Messaging;
 
-public sealed class TriageCompletedConsumerHostedService : BackgroundService
+public sealed class TriageCompletedConsumerHostedService : KafkaConsumerHostedService
 {
-    private readonly ILogger<TriageCompletedConsumerHostedService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly KafkaOptions _kafka;
 
     public TriageCompletedConsumerHostedService(
         ILogger<TriageCompletedConsumerHostedService> logger,
-        IOptions<KafkaOptions> kafka)
+        IOptions<KafkaConnectionOptions> kafkaConnection,
+        IOptions<KafkaOptions> kafka,
+        IServiceScopeFactory scopeFactory)
+        : base(logger, kafkaConnection)
     {
-        _logger = logger;
+        _scopeFactory = scopeFactory;
         _kafka = kafka.Value;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override IReadOnlyList<string> Topics => [_kafka.TriageCompletedTopic];
+
+    protected override async Task HandleMessageAsync(
+        string topic,
+        string? key,
+        string payload,
+        CancellationToken cancellationToken)
     {
-        if (!_kafka.Enabled)
-        {
-            _logger.LogInformation(
-                "Kafka consumer disabled. Process triage via POST /internal/routing/triage-completed. Topic={Topic}",
-                _kafka.TriageCompletedTopic);
-            return Task.CompletedTask;
-        }
+        var triageEvent = JsonSerializer.Deserialize<TriageCompletedEventDto>(payload, JsonSerializerOptions)
+            ?? throw new InvalidOperationException("Invalid triage.completed payload.");
 
-        _logger.LogWarning(
-            "Kafka.Enabled=true but Confluent consumer is not implemented yet. Topic={Topic}, group={Group}",
-            _kafka.TriageCompletedTopic,
-            _kafka.ConsumerGroupId);
-
-        return Task.CompletedTask;
+        using var scope = _scopeFactory.CreateScope();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<IRoutingOrchestrator>();
+        await orchestrator.ProcessTriageCompletedAsync(triageEvent, cancellationToken).ConfigureAwait(false);
     }
+
+    private static readonly JsonSerializerOptions JsonSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 }

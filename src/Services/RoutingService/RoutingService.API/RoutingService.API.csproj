@@ -16,5 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\RoutingService.Application\RoutingService.Application.csproj" />
     <ProjectReference Include="..\RoutingService.Infrastructure\RoutingService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.AspNetCore.Authentication\Vitals.AspNetCore.Authentication.csproj" />
   </ItemGroup>
 </Project>

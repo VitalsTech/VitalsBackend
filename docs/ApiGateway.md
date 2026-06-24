@@ -1,44 +1,41 @@
 # API Gateway
 
-Единая точка входа для клиентов Vitals. Объединяет **AuthService**, **UserService**, **MedicalRecordService** и **AITriageService**.
+Единая точка входа для клиентов Vitals. Все публичные эндпоинты объявлены в Gateway с **DTO** и **FluentValidation**; запросы проксируются во внутренние сервисы через типизированные HTTP-клиенты.
 
 Публичный префикс: **`/api/v1/`**
 
-## Маршрутизация
+## Контроллеры
 
-| Публичный путь | Backend |
-|----------------|---------|
-| `POST /api/v1/auth/*` | AuthService (контроллер + DTO + FluentValidation) |
-| `GET /api/v1/auth/esia/*` | AuthService (YARP) |
-| `/api/v1/users/*` | UserService |
-| `/api/v1/admin/*` | UserService |
-| `/api/v1/medical-records/*` | MedicalRecordService |
-| `/api/v1/triage/*` | AITriageService |
-| `/api/v1/consultations/*` | ConsultationService |
-| `/api/v1/consultations/hub/*` | ConsultationService (SignalR WebSocket) |
-| `/api/v1/prescriptions/*` | PrescriptionService |
-| `/api/v1/doctors` | 501 (заглушка) |
+| Контроллер | Путь | Backend |
+|------------|------|---------|
+| Auth | `/api/v1/auth/*` | AuthService |
+| Users | `/api/v1/users/*` | UserService |
+| Admin | `/api/v1/admin/*` | UserService |
+| AdminRoles | `/api/v1/admin/roles/*` | UserService |
+| Doctors | `/api/v1/doctors/*` | UserService (+ расписание — stub в Gateway) |
+| MedicalRecords | `/api/v1/medical-records/*` | MedicalRecordService |
+| Triage | `/api/v1/triage/*` | AITriageService |
+| Consultations | `/api/v1/consultations/*` | ConsultationService |
+| Prescriptions | `/api/v1/prescriptions/*` | PrescriptionService |
+| Notifications | `/api/v1/notifications/*` | NotificationService |
 
-### Triage через Gateway
+### YARP (только прозрачный proxy)
 
-| Метод | Gateway | → Backend |
-|-------|---------|-----------|
-| POST | `/api/v1/triage/sessions` | `/api/triage/sessions` |
-| POST | `/api/v1/triage/sessions/{id}/messages` | `/api/triage/sessions/{id}/messages` |
-| GET | `/api/v1/triage/sessions/{id}` | `/api/triage/sessions/{id}` |
-
-Требуется JWT (`Authorization: Bearer`).
+| Путь | Назначение |
+|------|------------|
+| `/api/v1/auth/esia/*` | OAuth ESIA (редиректы AuthService) |
+| `/api/v1/consultations/hub/*` | SignalR WebSocket |
 
 ## Middleware (порядок)
 
 1. GlobalExceptionMiddleware — 500 + `errorId`
-2. ResponseCompression — GZip / Brotli
+2. ResponseCompression — GZip / Brotli (>1 KB JSON)
 3. RequestIdMiddleware — `X-Request-ID`
-4. RequestLoggingMiddleware — метод, путь, статус, время, IP
-5. JwtAuthenticationMiddleware — опциональный JWT
-6. RateLimitingMiddleware — Redis sliding window
-7. Authentication / Authorization
-8. Controllers + YARP
+4. RequestLoggingMiddleware — метод, путь, статус, время, IP (без паролей/токенов)
+5. JwtAuthenticationMiddleware — опциональный JWT в `HttpContext.User`
+6. RateLimitingMiddleware — sliding window (Redis или in-memory fallback)
+7. Authentication / Authorization — `[Authorize]` на защищённых контроллерах
+8. Controllers + YARP (ESIA, SignalR)
 
 ## Rate limiting
 
@@ -51,12 +48,25 @@
 
 429 + `Retry-After`.
 
+По умолчанию в dev: `RateLimiting:UseInMemoryFallback: true` (без Redis).  
+Production: Redis (`RateLimiting:RedisConnectionString`).
+
+## Валидация
+
+FluentValidation на входящих DTO (auth, consultations, prescriptions, triage, medical records, notifications, admin).  
+Ошибки → **400 Bad Request** до вызова backend.
+
+## Doctors API
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/api/v1/doctors?specialization=&query=&page=&pageSize=` | Поиск врачей (агрегация через UserService admin search) |
+| GET | `/api/v1/doctors/{id}` | Профиль врача |
+| GET | `/api/v1/doctors/{id}/schedule?from=&days=` | Расписание (stub в Gateway) |
+
 ## Запуск (локально)
 
 ```bash
-docker run -d -p 6379:6379 redis:7-alpine
-
-# UserService :5195, AuthService :5200, MedicalRecordService :5210, AITriage :5220
 cd src/Services/ApiGateway
 dotnet run --project ApiGateway.API
 ```
@@ -65,6 +75,7 @@ Gateway: http://localhost:5080/swagger
 
 Примеры:
 - `POST http://localhost:5080/api/v1/auth/register`
+- `GET http://localhost:5080/api/v1/doctors?specialization=Therapist`
 - `POST http://localhost:5080/api/v1/triage/sessions` (с JWT)
 
 ## Docker
@@ -74,9 +85,9 @@ cd src/Services/ApiGateway
 docker compose up -d
 ```
 
-Порт **5000**. Требует запущенные backend-сервисы в сети `vitals-network`.
+Порт **5000**. Redis для rate limit в Docker; backend-сервисы в сети `vitals-network`.
 
 ## JWT
 
-Ключ берётся из `Jwt:JwksUrl` (AuthService `/internal/jwks`) или `Jwt:RsaPublicKeyPem`.
-В Development при недоступном AuthService используется временный ключ (только для локальной отладки).
+Ключ из `Jwt:JwksUrl` (AuthService `/internal/jwks`) или `Jwt:RsaPublicKeyPem`.  
+Development: временный ключ при недоступном AuthService.

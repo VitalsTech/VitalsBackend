@@ -114,3 +114,10 @@ public sealed class PharmacyDispatchResultDto
     public string? OrderId { get; set; }
     public string? Message { get; set; }
 }
+
+public sealed class EgiszPreferentialCheckResult
+{
+    public bool IsEligible { get; set; }
+    public string? RejectionReason { get; set; }
+    public string? EgiszReference { get; set; }
+}

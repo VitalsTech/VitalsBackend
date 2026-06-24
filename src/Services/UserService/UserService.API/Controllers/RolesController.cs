@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Common;
 using UserService.Domain.Entities;
@@ -7,6 +8,7 @@ namespace UserService.API.Controllers
 {
     [ApiController]
     [Route("api/admin/roles")]
+    [Authorize(Policy = "InternalService")]
     public class RolesController : ControllerBase
     {
         private readonly IRoleRepository _roleRepository;

@@ -114,7 +114,12 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
             ?? throw new InvalidOperationException($"No dispatcher for {log.Channel}");
 
         log.AttemptCount += 1;
-        var result = await dispatcher.DispatchAsync(log.UserId, rendered, ParsePriority(log.Priority), cancellationToken);
+        var priority = ParsePriority(log.Priority);
+        var maxAttempts = priority == NotificationPriority.Critical
+            ? _options.CriticalMaxRetryAttempts
+            : _options.MaxRetryAttempts;
+
+        var result = await dispatcher.DispatchAsync(log.UserId, rendered, priority, cancellationToken);
         if (result.Success)
         {
             log.Status = DeliveryStatus.Delivered.ToString();
@@ -122,14 +127,51 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
             log.ErrorMessage = null;
             log.NextRetryAt = null;
         }
+        else if (log.AttemptCount >= maxAttempts)
+        {
+            await MoveToDeadLetterAsync(log, result.ErrorMessage, cancellationToken);
+        }
         else
         {
             log.Status = DeliveryStatus.Failed.ToString();
             log.ErrorMessage = result.ErrorMessage;
-            log.NextRetryAt = CalculateNextRetry(log.AttemptCount, ParsePriority(log.Priority));
+            log.NextRetryAt = CalculateNextRetry(log.AttemptCount, priority);
         }
 
         await _repo.SaveDeliveryLogAsync(log, cancellationToken);
+    }
+
+    private async Task MoveToDeadLetterAsync(
+        NotificationDeliveryLog log,
+        string? errorMessage,
+        CancellationToken cancellationToken)
+    {
+        log.Status = "DeadLettered";
+        log.ErrorMessage = errorMessage;
+        log.NextRetryAt = null;
+
+        await _repo.SaveDeadLetterAsync(new DeadLetterNotification
+        {
+            Id = Guid.NewGuid(),
+            OriginalDeliveryId = log.Id,
+            UserId = log.UserId,
+            SourceEventId = log.SourceEventId,
+            EventType = log.EventType,
+            Channel = log.Channel,
+            Subject = log.Subject,
+            Body = log.Body,
+            ErrorMessage = errorMessage,
+            AttemptCount = log.AttemptCount,
+            Priority = log.Priority,
+            MovedAt = DateTime.UtcNow
+        }, cancellationToken);
+
+        _logger.LogWarning(
+            "Delivery {DeliveryId} moved to DLQ after {Attempts} attempts ({Channel}/{EventType})",
+            log.Id,
+            log.AttemptCount,
+            log.Channel,
+            log.EventType);
     }
 
     private async Task<NotificationDeliveryResponse> DispatchAsync(

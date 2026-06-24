@@ -34,6 +34,15 @@ public interface IPharmacyIntegrationClient
     Task<PharmacyDispatchResultDto> SendPrescriptionAsync(Guid prescriptionId, Guid pharmacyId, Prescription prescription, CancellationToken cancellationToken = default);
 }
 
+public interface IEgiszClient
+{
+    Task<EgiszPreferentialCheckResult> CheckPreferentialEligibilityAsync(
+        Guid patientId,
+        string? preferentialCategory,
+        IReadOnlyList<string> atcCodes,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IESignatureService
 {
     Task<string> SignPrescriptionAsync(Prescription prescription, CancellationToken cancellationToken = default);

@@ -23,7 +23,7 @@ public sealed class UserServiceOptions
 public sealed class IntegrationServiceOptions
 {
     public const string SectionName = "IntegrationService";
-    public string BaseUrl { get; set; } = "http://localhost:5260";
+    public string BaseUrl { get; set; } = "http://localhost:5270";
     public bool UseStub { get; set; } = true;
 }
 
@@ -31,6 +31,8 @@ public sealed class KafkaOptions
 {
     public const string SectionName = "Kafka";
     public bool Enabled { get; set; }
+    public string BootstrapServers { get; set; } = "localhost:9092";
+    public string ClientId { get; set; } = "prescription-service";
     public string PrescriptionCreatedTopic { get; set; } = "prescription.created";
     public string PrescriptionStatusUpdatedTopic { get; set; } = "prescription.status_updated";
     public string PrescriptionExpiringSoonTopic { get; set; } = "prescription.expiring_soon";

@@ -14,6 +14,7 @@ public sealed class NotificationDbContext : DbContext
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<DevicePushToken> PushTokens => Set<DevicePushToken>();
     public DbSet<UserNotificationPreference> Preferences => Set<UserNotificationPreference>();
+    public DbSet<DeadLetterNotification> DeadLetters => Set<DeadLetterNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,17 @@ public sealed class NotificationDbContext : DbContext
             entity.ToTable("user_notification_preferences");
             entity.HasKey(x => new { x.UserId, x.Category });
             entity.Property(x => x.Category).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<DeadLetterNotification>(entity =>
+        {
+            entity.ToTable("dead_letter_notifications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(128);
+            entity.Property(x => x.Channel).HasMaxLength(16);
+            entity.Property(x => x.Priority).HasMaxLength(16);
+            entity.HasIndex(x => x.MovedAt);
+            entity.HasIndex(x => x.UserId);
         });
     }
 }

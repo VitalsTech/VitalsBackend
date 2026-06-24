@@ -14,6 +14,7 @@ public sealed class KafkaOptions
     public bool Enabled { get; set; }
     public string BootstrapServers { get; set; } = "localhost:9092";
     public string ConsumerGroupId { get; set; } = "notification-service";
+    public string ClientId { get; set; } = "notification-service";
     public IReadOnlyList<string> Topics { get; set; } = Array.Empty<string>();
 }
 

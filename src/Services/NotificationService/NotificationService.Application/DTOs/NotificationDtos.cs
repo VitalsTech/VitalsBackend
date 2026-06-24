@@ -79,6 +79,18 @@ public sealed class NotificationStatsResponse
     public double DeliveryRatePercent { get; set; }
 }
 
+public sealed class DeadLetterNotificationDto
+{
+    public Guid Id { get; set; }
+    public Guid OriginalDeliveryId { get; set; }
+    public Guid UserId { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Channel { get; set; } = string.Empty;
+    public string? ErrorMessage { get; set; }
+    public int AttemptCount { get; set; }
+    public DateTime MovedAt { get; set; }
+}
+
 public sealed class RenderedMessage
 {
     public string? Subject { get; set; }

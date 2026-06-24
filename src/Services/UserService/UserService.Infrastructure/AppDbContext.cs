@@ -12,6 +12,7 @@ namespace UserService.Infrastructure.Data
         public DbSet<Profile> Profiles { get; set; }
         public DbSet<PatientProfile> PatientProfiles { get; set; }
         public DbSet<DoctorProfile> DoctorProfiles { get; set; }
+        public DbSet<DoctorScheduleSlot> DoctorScheduleSlots { get; set; }
         public DbSet<OrganizationProfile> OrganizationProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
@@ -116,6 +117,15 @@ namespace UserService.Infrastructure.Data
             modelBuilder.Entity<DoctorProfile>()
                 .Property(d => d.Category)
                 .HasConversion<string>();
+
+            modelBuilder.Entity<DoctorScheduleSlot>()
+                .HasIndex(s => new { s.DoctorProfileId, s.StartsAt });
+
+            modelBuilder.Entity<DoctorScheduleSlot>()
+                .HasOne(s => s.DoctorProfile)
+                .WithMany()
+                .HasForeignKey(s => s.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<OrganizationProfile>()
                 .Property(o => o.Role)

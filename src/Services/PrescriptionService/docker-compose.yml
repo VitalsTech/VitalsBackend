@@ -1,45 +1,5 @@
-services:
-  postgres-prescription:
-    image: postgres:15
-    container_name: vitals-postgres-prescription
-    environment:
-      POSTGRES_DB: PrescriptionDb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-    ports:
-      - "5438:5432"
-    volumes:
-      - postgres-prescription-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - vitals-network
+# Per-service compose перенесён в корень репозитория.
+# Запуск всего бэкенда: docker compose -f ../../../docker-compose.yml up --build -d
 
-  prescription.api:
-    build:
-      context: .
-      dockerfile: PrescriptionService.API/Dockerfile
-    container_name: vitals-prescription
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://+:80
-      - ConnectionStrings__DefaultConnection=Host=postgres-prescription;Port=5432;Database=PrescriptionDb;Username=postgres;Password=postgres123
-      - MedicalRecordService__BaseUrl=http://medicalrecordservice.api:80
-      - Jwt__JwksUrl=http://authservice.api:80/internal/jwks
-    ports:
-      - "5007:80"
-    depends_on:
-      postgres-prescription:
-        condition: service_healthy
-    networks:
-      - vitals-network
-
-volumes:
-  postgres-prescription-data:
-
-networks:
-  vitals-network:
-    driver: bridge
+include:
+  - path: ../../../docker-compose.yml

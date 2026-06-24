@@ -1,0 +1,280 @@
+name: vitals-backend
+
+x-service-defaults: &service-defaults
+  environment:
+    ASPNETCORE_ENVIRONMENT: Docker
+    ASPNETCORE_URLS: http://+:80
+  networks:
+    - vitals
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./src/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - vitals
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vitals
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - vitals
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    networks:
+      - vitals
+
+  authservice:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/AuthService/AuthService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  userservice:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/UserService/UserService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+
+  medicalrecord:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/MedicalRecordService/MedicalRecordService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+
+  aitriage:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/AITriageService/AITriageService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      medicalrecord:
+        condition: service_started
+      authservice:
+        condition: service_started
+
+  routing:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/RoutingService/RoutingService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      userservice:
+        condition: service_started
+      medicalrecord:
+        condition: service_started
+      authservice:
+        condition: service_started
+
+  consultation:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/ConsultationService/ConsultationService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      medicalrecord:
+        condition: service_started
+      authservice:
+        condition: service_started
+
+  integration:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/IntegrationService/IntegrationService.API/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+
+  prescription:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/PrescriptionService/PrescriptionService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      medicalrecord:
+        condition: service_started
+      userservice:
+        condition: service_started
+      integration:
+        condition: service_started
+      authservice:
+        condition: service_started
+
+  notification:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/NotificationService/NotificationService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      userservice:
+        condition: service_started
+      integration:
+        condition: service_started
+      authservice:
+        condition: service_started
+
+  payment:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/PaymentService/PaymentService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      integration:
+        condition: service_started
+      authservice:
+        condition: service_started
+
+  analytics:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/AnalyticsService/AnalyticsService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+
+  quality:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/QualityService/QualityService.API/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+
+  apigateway:
+    <<: *service-defaults
+    build:
+      context: ./src
+      dockerfile: Services/ApiGateway/ApiGateway.API/Dockerfile
+    ports:
+      - "5080:80"
+    depends_on:
+      redis:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+      userservice:
+        condition: service_started
+      medicalrecord:
+        condition: service_started
+      aitriage:
+        condition: service_started
+      routing:
+        condition: service_started
+      consultation:
+        condition: service_started
+      prescription:
+        condition: service_started
+      notification:
+        condition: service_started
+      payment:
+        condition: service_started
+      analytics:
+        condition: service_started
+      quality:
+        condition: service_started
+
+networks:
+  vitals:
+    driver: bridge
+
+volumes:
+  postgres-data:

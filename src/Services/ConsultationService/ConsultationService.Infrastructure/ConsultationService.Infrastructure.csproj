@@ -21,5 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ConsultationService.Application\ConsultationService.Application.csproj" />
     <ProjectReference Include="..\ConsultationService.Domain\ConsultationService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.Messaging\Vitals.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.ESignature\Vitals.ESignature.csproj" />
   </ItemGroup>
 </Project>

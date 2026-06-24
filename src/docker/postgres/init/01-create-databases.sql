@@ -1,0 +1,11 @@
+CREATE DATABASE "UserServiceDb";
+CREATE DATABASE "AuthServiceDb";
+CREATE DATABASE "MedicalRecordDb";
+CREATE DATABASE "AITriageDb";
+CREATE DATABASE "RoutingDb";
+CREATE DATABASE "ConsultationDb";
+CREATE DATABASE "PrescriptionDb";
+CREATE DATABASE "NotificationDb";
+CREATE DATABASE "PaymentDb";
+CREATE DATABASE "AnalyticsDb";
+CREATE DATABASE "QualityDb";

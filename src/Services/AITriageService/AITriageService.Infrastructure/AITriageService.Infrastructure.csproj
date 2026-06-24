@@ -16,5 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\AITriageService.Application\AITriageService.Application.csproj" />
     <ProjectReference Include="..\AITriageService.Domain\AITriageService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Vitals.Messaging\Vitals.Messaging.csproj" />
   </ItemGroup>
 </Project>

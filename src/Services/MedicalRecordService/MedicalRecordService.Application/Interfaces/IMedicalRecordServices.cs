@@ -29,3 +29,19 @@ public interface IMedicalRecordEventPublisher
 {
     Task PublishEventAppendedAsync(Guid patientId, Guid eventId, string eventType, long version, CancellationToken cancellationToken = default);
 }
+
+public interface IPatientAttachmentService
+{
+    Task<PatientAttachmentDto> UploadAsync(
+        Guid patientId,
+        string fileName,
+        Stream content,
+        string contentType,
+        ActorContext actor,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PatientAttachmentDto>> ListAsync(
+        Guid patientId,
+        ActorContext actor,
+        CancellationToken cancellationToken = default);
+}

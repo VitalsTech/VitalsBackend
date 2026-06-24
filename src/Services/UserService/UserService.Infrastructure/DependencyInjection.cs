@@ -2,8 +2,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UserService.Domain.Interfaces;
+using UserService.Application.Interfaces;
 using UserService.Infrastructure.Data;
 using UserService.Infrastructure.Repositories;
+using UserService.Infrastructure.Services;
 
 namespace UserService.Infrastructure
 {
@@ -18,6 +20,7 @@ namespace UserService.Infrastructure
             services.AddScoped<IRoleRepository, RoleRepository>();
             services.AddScoped<IPermissionRepository, PermissionRepository>();
             services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+            services.AddScoped<IDoctorScheduleService, DoctorScheduleService>();
 
             return services;
         }

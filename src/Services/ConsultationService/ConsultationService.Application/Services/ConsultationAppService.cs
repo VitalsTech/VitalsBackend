@@ -7,6 +7,7 @@ using ConsultationService.Domain.Entities;
 using ConsultationService.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Vitals.ESignature;
 
 namespace ConsultationService.Application.Services;
 
@@ -19,6 +20,7 @@ public sealed class ConsultationAppService : IConsultationService
     private readonly IConsultationEventPublisher _publisher;
     private readonly ISfuSignalingService _sfu;
     private readonly IConsultationChatNotifier _notifier;
+    private readonly IESignatureProvider _signature;
     private readonly KafkaOptions _kafka;
     private readonly ConsultationOptions _options;
     private readonly ILogger<ConsultationAppService> _logger;
@@ -31,6 +33,7 @@ public sealed class ConsultationAppService : IConsultationService
         IConsultationEventPublisher publisher,
         ISfuSignalingService sfu,
         IConsultationChatNotifier notifier,
+        IESignatureProvider signature,
         IOptions<KafkaOptions> kafka,
         IOptions<ConsultationOptions> options,
         ILogger<ConsultationAppService> logger)
@@ -42,6 +45,7 @@ public sealed class ConsultationAppService : IConsultationService
         _publisher = publisher;
         _sfu = sfu;
         _notifier = notifier;
+        _signature = signature;
         _kafka = kafka.Value;
         _options = options.Value;
         _logger = logger;
@@ -188,6 +192,16 @@ public sealed class ConsultationAppService : IConsultationService
     {
         var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken);
         session.ProtocolJson = JsonSerializer.Serialize(request);
+
+        var signResult = await _signature.SignAsync(new SignDocumentRequest
+        {
+            DocumentType = "consultation-protocol",
+            DocumentId = sessionId,
+            SignerId = doctorId,
+            ContentBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(session.ProtocolJson))
+        }, cancellationToken).ConfigureAwait(false);
+        session.ProtocolSignature = signResult.Signature;
+
         await TransitionAsync(session, ConsultationStatus.DoctorLeft, "doctor", doctorId, "Protocol submitted", cancellationToken);
         await _sessions.SaveSessionAsync(session, cancellationToken);
 
@@ -199,7 +213,8 @@ public sealed class ConsultationAppService : IConsultationService
             request.PreliminaryDiagnosisText,
             request.Recommendations,
             request.Prescriptions,
-            request.LabOrders
+            request.LabOrders,
+            Signature = session.ProtocolSignature
         }, session.Id, cancellationToken);
 
         return MapSession(session);
@@ -226,7 +241,8 @@ public sealed class ConsultationAppService : IConsultationService
             session.Id,
             session.StartedAt,
             session.CompletedAt,
-            Protocol = protocol
+            Protocol = protocol,
+            Signature = session.ProtocolSignature
         }, session.Id, cancellationToken);
 
         await _publisher.PublishAsync(_kafka.ConsultationCompletedTopic, new
