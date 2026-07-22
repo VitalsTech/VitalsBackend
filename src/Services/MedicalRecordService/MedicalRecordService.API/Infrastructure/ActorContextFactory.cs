@@ -16,7 +16,17 @@ public static class ActorContextFactory
             return new ActorContext
             {
                 UserId = Guid.TryParse(sub, out var id) ? id : Guid.Empty,
-                Roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList(),
+                // JWT emits short "role"; older MapInboundClaims may remap to ClaimTypes.Role.
+                Roles = user.FindAll(ClaimTypes.Role)
+                    .Concat(user.FindAll("role"))
+                    .Select(c => c.Value)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                ProfileIds = user.FindAll("profile_id")
+                    .Select(c => Guid.TryParse(c.Value, out var profileId) ? profileId : Guid.Empty)
+                    .Where(profileId => profileId != Guid.Empty)
+                    .Distinct()
+                    .ToList(),
                 IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
                 SessionId = httpContext.TraceIdentifier
             };

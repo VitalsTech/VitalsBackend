@@ -74,7 +74,7 @@ public static class Program
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = "sub",
-                    RoleClaimType = ClaimTypes.Role
+                    RoleClaimType = "role"
                 };
             });
 

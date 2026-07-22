@@ -119,7 +119,8 @@ public static class VitalsAuthenticationExtensions
         ValidateLifetime = true,
         ClockSkew = TimeSpan.FromSeconds(30),
         NameClaimType = "sub",
-        RoleClaimType = ClaimTypes.Role
+        // AuthService serializes roles as short JWT claim "role" (outbound claim map).
+        RoleClaimType = "role"
     };
 }
 

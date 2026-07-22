@@ -281,7 +281,8 @@ public sealed class AuthenticationService : IAuthenticationService
         var accessToken = _jwtTokenService.CreateAccessToken(
             authUser.UserPublicId,
             rolesData.Roles,
-            rolesData.Permissions);
+            rolesData.Permissions,
+            rolesData.ProfileIds);
 
         var refreshTokenValue = Guid.NewGuid().ToString("N");
         var refresh = new RefreshToken
