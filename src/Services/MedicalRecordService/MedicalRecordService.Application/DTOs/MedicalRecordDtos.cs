@@ -116,6 +116,7 @@ public sealed class ActorContext
 {
     public Guid UserId { get; set; }
     public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<Guid> ProfileIds { get; set; } = Array.Empty<Guid>();
     public bool IsSystemService { get; set; }
     public string? ServiceName { get; set; }
     public string? IpAddress { get; set; }

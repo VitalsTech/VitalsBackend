@@ -21,7 +21,11 @@ public sealed class JwtTokenService : IJwtTokenService
         _keyProvider = keyProvider;
     }
 
-    public string CreateAccessToken(Guid userPublicId, IEnumerable<string> roles, IEnumerable<string> scopes)
+    public string CreateAccessToken(
+        Guid userPublicId,
+        IEnumerable<string> roles,
+        IEnumerable<string> scopes,
+        IEnumerable<Guid>? profileIds = null)
     {
         var now = DateTime.UtcNow;
         var claims = new List<Claim>
@@ -33,6 +37,8 @@ public sealed class JwtTokenService : IJwtTokenService
 
         claims.AddRange(roles.Distinct().Select(r => new Claim(ClaimTypes.Role, r)));
         claims.AddRange(scopes.Distinct().Select(s => new Claim("scope", s)));
+        if (profileIds is not null)
+            claims.AddRange(profileIds.Distinct().Select(id => new Claim("profile_id", id.ToString())));
 
         var descriptor = new SecurityTokenDescriptor
         {
@@ -61,7 +67,11 @@ public sealed class JwtTokenService : IJwtTokenService
             {
                 IsValid = true,
                 UserPublicId = userPublicId,
-                Roles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct().ToList(),
+                Roles = principal.FindAll(ClaimTypes.Role)
+                    .Concat(principal.FindAll("role"))
+                    .Select(c => c.Value)
+                    .Distinct()
+                    .ToList(),
                 Scopes = principal.FindAll("scope").Select(c => c.Value).Distinct().ToList(),
                 ExpiresAt = validated.ValidTo
             };
@@ -90,7 +100,9 @@ public sealed class JwtTokenService : IJwtTokenService
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = _keyProvider.SigningKey,
         ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromSeconds(30)
+        ClockSkew = TimeSpan.FromSeconds(30),
+        NameClaimType = "sub",
+        RoleClaimType = "role"
     };
 
     private static ValidateTokenResponse Invalid(string reason) =>

@@ -92,6 +92,7 @@ public sealed class UserServiceRoleResponse
     public Guid UserPublicId { get; set; }
     public List<string> Roles { get; set; } = new();
     public List<string> Permissions { get; set; } = new();
+    public List<Guid> ProfileIds { get; set; } = new();
 }
 
 public sealed class EsiaUserInfo

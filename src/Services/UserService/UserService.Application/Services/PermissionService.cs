@@ -52,7 +52,8 @@ namespace UserService.Application.Services
             {
                 UserPublicId = publicId,
                 Roles = rolesList.Distinct().ToList(),
-                Permissions = permissionsList.Distinct().ToList()
+                Permissions = permissionsList.Distinct().ToList(),
+                ProfileIds = profiles.Select(p => p.Id).ToList()
             };
         }
 

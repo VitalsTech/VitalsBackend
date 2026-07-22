@@ -57,8 +57,14 @@ public static class Program
 
         var app = builder.Build();
 
+        app.UseCors ( x => x
+            .AllowAnyOrigin ()
+            .AllowAnyMethod ()
+            .AllowAnyHeader ());
+
         if (!app.Environment.IsProduction())
         {
+
             app.UseSwagger();
             app.UseSwaggerUI();
             app.MapGet("/", () => Results.Redirect("/swagger"));
@@ -100,7 +106,7 @@ public static class Program
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = "sub",
-                    RoleClaimType = ClaimTypes.Role
+                    RoleClaimType = "role"
                 };
                 options.Events = new JwtBearerEvents
                 {

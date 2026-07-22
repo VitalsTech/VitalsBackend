@@ -18,8 +18,15 @@ public sealed class AccessControlService : IAccessControlService
 
     public AccessControlService(IAccessGrantRepository grants) => _grants = grants;
 
-    public bool IsPatientSelf(Guid patientId, ActorContext actor) =>
-        actor.UserId == patientId && actor.Roles.Contains("Patient", StringComparer.OrdinalIgnoreCase);
+    public bool IsPatientSelf(Guid patientId, ActorContext actor)
+    {
+        if (!actor.Roles.Contains("Patient", StringComparer.OrdinalIgnoreCase))
+            return false;
+
+        // Medical-record patientId may be either user PublicId (JWT sub) or Patient ProfileId.
+        return actor.UserId == patientId
+            || actor.ProfileIds.Contains(patientId);
+    }
 
     public async Task EnsureAccessAsync(
         Guid patientId,
