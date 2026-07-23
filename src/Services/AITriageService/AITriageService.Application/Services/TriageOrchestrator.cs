@@ -146,6 +146,18 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
                 EmergencyWarning = false
             };
             session.LatestUrgencyLevel = llmResult.UrgencyLevel;
+
+            var mockAssessment = new TriageAssessment
+            {
+                SessionId = sessionId,
+                MessageId = session.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault()?.Id ?? Guid.Empty,
+                UrgencyLevel = llmResult.UrgencyLevel,
+                ExtractedEntitiesJson = "[]",
+                NerEntitiesJson = "[]",
+                LlmResultJson = JsonSerializer.Serialize(llmResult),
+                AssistantReply = llmResult.RecommendedAction
+            };
+            await _sessions.AddAssessmentAsync(mockAssessment, cancellationToken);
         }
         else
         {
@@ -154,6 +166,7 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
                 UrgencyLevel = latestAssessment.UrgencyLevel,
                 RecommendedAction = latestAssessment.AssistantReply
             };
+            session.LatestUrgencyLevel = llmResult.UrgencyLevel;
         }
 
         session.Status = "Completed";
@@ -165,6 +178,15 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
 
         _logger.LogInformation("Triage session {SessionId} completed for patient {PatientId}", sessionId, session.PatientId);
         return MapSession(session);
+    }
+
+    public async Task<IReadOnlyList<TriageSessionResponse>> GetSessionsByPatientAsync(
+        Guid patientId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var sessions = await _sessions.GetByPatientIdAsync(patientId, limit, cancellationToken);
+        return sessions.Select(MapSession).ToList();
     }
 
     public async Task<TriageSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)

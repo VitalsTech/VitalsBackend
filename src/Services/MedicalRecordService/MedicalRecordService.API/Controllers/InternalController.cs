@@ -79,4 +79,28 @@ public class InternalController : ControllerBase
         actor.ServiceName = "internal";
         return Ok(await _queries.GetHistoryAsync(patientId, from, to, types, actor, cancellationToken));
     }
+
+    /// <summary>
+    /// Doctor access check: active grant ∪ latest consultation doctor.
+    /// doctorIds — comma-separated PublicId / profile ids from JWT.
+    /// </summary>
+    [HttpGet("doctor-access")]
+    public async Task<ActionResult<object>> CheckDoctorAccess(
+        Guid patientId,
+        [FromQuery] string doctorIds,
+        [FromServices] IDoctorRecipientResolver recipients,
+        CancellationToken cancellationToken)
+    {
+        var ids = string.IsNullOrWhiteSpace(doctorIds)
+            ? Array.Empty<Guid>()
+            : doctorIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => Guid.TryParse(s, out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToArray();
+
+        var allowed = await recipients.DoctorHasAccessAsync(patientId, ids, cancellationToken);
+        return Ok(new { patientId, allowed });
+    }
 }

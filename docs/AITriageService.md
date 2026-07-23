@@ -22,10 +22,13 @@
 | POST  | `/api/triage/sessions`               | Создать сессию триажа                 |
 | POST  | `/api/triage/sessions/{id}/messages` | Сообщение пациента → ответ ассистента |
 | POST  | `/api/triage/sessions/{id}/complete` | **Завершить триаж** (mock-маршрут, если нет оценки LLM) |
-| GET   | `/api/triage/sessions/{id}`          | Сессия + последняя оценка             |
+| GET   | `/api/triage/sessions/{id}`          | Сессия + последняя оценка (patient self / doctor with access) |
+| GET   | `/api/triage/patients/{patientId}/sessions?limit=5` | Список сессий пациента для врача (403 без grant/консультации) |
 
 
 Требуется JWT (Bearer). Internal: `GET /internal/triage/sessions/{id}`.
+
+Gateway: `GET /api/v1/triage/patients/{patientId}/sessions`.
 
 ## Поток обработки сообщения
 
@@ -49,8 +52,8 @@
 | `recommendation` / `recommendationText` | `"Запись к терапевту в течение 3 дней…"` | Ответ API, экран «Результат триажа» |
 | `canBeRemote` | `true` при urgency ≤ 3 | Ответ API |
 | Событие медкарты | `AiTriageUrgencyDetermined` | `POST internal/medical-records/patients/{patientId}/events` |
-| Payload события | `{ sessionId, urgencyLevel, recommendedSpecialization, recommendation, route[] }` | Страница «Мой путь» (`/patient/home`) — блок «Маршрут лечения» |
-| Kafka | `triage.completed` | RoutingService (заглушка) |
+| Payload события | `{ sessionId, urgencyLevel, recommendedSpecialization, recommendation, canBeRemote, route[] }` | Страница «Мой путь» + карточка врача |
+| Kafka | `triage.completed` + (через Medical Records) `patient.triage.completed` врачам | Routing + NotificationService |
 
 `patientId` в сессии триажа — **ProfileId** пациента (из JWT claim `profile_id`), тот же id, что использует фронтенд в `useAuth().patientId`.
 

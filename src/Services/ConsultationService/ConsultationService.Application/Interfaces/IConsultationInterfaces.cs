@@ -14,6 +14,7 @@ public interface IConsultationRepository
         IReadOnlyList<Guid>? alternateDoctorIds = null,
         IReadOnlyList<Guid>? alternatePatientIds = null,
         CancellationToken cancellationToken = default);
+    Task<ConsultationSession?> FindLatestByPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
     Task SaveSessionAsync(ConsultationSession session, CancellationToken cancellationToken = default);
     Task AddTransitionAsync(SessionStatusTransition transition, CancellationToken cancellationToken = default);
     Task<bool> AddParticipantAsync(SessionParticipant participant, CancellationToken cancellationToken = default);

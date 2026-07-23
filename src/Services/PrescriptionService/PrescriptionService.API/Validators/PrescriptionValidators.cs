@@ -19,8 +19,7 @@ public sealed class MedicationItemValidator : AbstractValidator<MedicationItemDt
     public MedicationItemValidator()
     {
         RuleFor(x => x.TradeName).NotEmpty();
-        RuleFor(x => x.Inn).NotEmpty();
-        RuleFor(x => x.AtcCode).NotEmpty();
+        // Inn / AtcCode optional for portal drafts — CreateDraftAsync fills defaults from TradeName.
         RuleFor(x => x.CourseDays).GreaterThan(0);
     }
 }

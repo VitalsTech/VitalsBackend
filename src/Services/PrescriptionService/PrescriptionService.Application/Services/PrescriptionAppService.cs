@@ -63,6 +63,8 @@ public sealed class PrescriptionAppService : IPrescriptionService
         CreatePrescriptionRequest request,
         CancellationToken cancellationToken = default)
     {
+        NormalizeMedications(request);
+
         foreach (var med in request.Medications)
         {
             if (!await _userPermissions.CanPrescribeAsync(doctorId, med.AtcCode, cancellationToken))
@@ -123,6 +125,11 @@ public sealed class PrescriptionAppService : IPrescriptionService
         await AddHistoryAsync(prescription.Id, PrescriptionStatus.Draft, PrescriptionStatus.Draft, "doctor", doctorId, null, cancellationToken);
 
         _logger.LogInformation("Draft prescription {Id} created for patient {PatientId}", prescription.Id, request.PatientId);
+
+        // Doctor portal sends confirmWarnings=true — treat as "issue now" (draft → signed).
+        if (request.ConfirmWarnings)
+            return await SignAsync(prescription.Id, doctorId, confirmWarnings: true, cancellationToken);
+
         return MapResponse(prescription, validation);
     }
 
@@ -325,6 +332,23 @@ public sealed class PrescriptionAppService : IPrescriptionService
             Status = prescription.Status.ToString(),
             prescription.PatientId
         }, cancellationToken);
+
+    private static void NormalizeMedications(CreatePrescriptionRequest request)
+    {
+        foreach (var med in request.Medications)
+        {
+            if (string.IsNullOrWhiteSpace(med.Inn))
+                med.Inn = med.TradeName.Trim();
+            if (string.IsNullOrWhiteSpace(med.AtcCode))
+                med.AtcCode = "UNSPEC";
+            if (string.IsNullOrWhiteSpace(med.DosageForm))
+                med.DosageForm = "не указана";
+            if (string.IsNullOrWhiteSpace(med.Route))
+                med.Route = "перорально";
+            if (string.IsNullOrWhiteSpace(med.PackageQuantity))
+                med.PackageQuantity = "1";
+        }
+    }
 
     private static PrescriptionMedicationItem MapMedication(MedicationItemDto dto) => new()
     {

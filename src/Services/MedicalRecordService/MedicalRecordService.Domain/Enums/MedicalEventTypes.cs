@@ -17,6 +17,7 @@ public static class MedicalEventTypes
     public const string VitalSignRecorded = "VitalSignRecorded";
     public const string ImmunizationRecorded = "ImmunizationRecorded";
     public const string DocumentUploaded = "DocumentUploaded";
+    public const string MoodCheck = "mood_check";
 
     // Informal types written by other services
     public const string ConsultationStarted = "ConsultationStarted";
@@ -46,6 +47,7 @@ public static class MedicalEventTypes
         VitalSignRecorded,
         ImmunizationRecorded,
         DocumentUploaded,
+        MoodCheck,
         ConsultationStarted,
         ConsultationJoined,
         ConsultationConsent,
@@ -106,8 +108,9 @@ public static class MedicalEventTypes
         if (value.Equals("triage_session", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("triage", StringComparison.OrdinalIgnoreCase))
             return AiTriageUrgencyDetermined;
-        if (value.Equals("mood_check", StringComparison.OrdinalIgnoreCase))
-            return VitalSignRecorded;
+        if (value.Equals("mood_check", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("mood", StringComparison.OrdinalIgnoreCase))
+            return MoodCheck;
         if (value.Equals("referral", StringComparison.OrdinalIgnoreCase))
             return TreatmentStarted;
 
@@ -143,17 +146,45 @@ public static class MedicalEventTypes
                 MapField(dict, "instructions", "frequency", "instructions", "specialInstructions");
                 break;
 
+            case var _ when eventType.Equals(MoodCheck, StringComparison.OrdinalIgnoreCase):
             case var _ when eventType.Equals(VitalSignRecorded, StringComparison.OrdinalIgnoreCase):
                 if (!dict.ContainsKey("vitalType"))
                     dict["vitalType"] = "mood";
                 if (!dict.ContainsKey("value") && dict.TryGetValue("mood", out var mood))
                     dict["value"] = mood;
+                // Derive moodCode / severity defaults from Russian labels (legacy payload).
+                if (!dict.ContainsKey("moodCode") && dict.TryGetValue("mood", out var moodLabel))
+                {
+                    var label = moodLabel switch
+                    {
+                        JsonElement el when el.ValueKind == JsonValueKind.String => el.GetString() ?? "",
+                        _ => moodLabel?.ToString() ?? ""
+                    };
+                    dict["moodCode"] = label switch
+                    {
+                        "Хорошо" => "good",
+                        "Устала" => "tired",
+                        "Стало хуже" => "worse",
+                        _ => "good"
+                    };
+                }
+                if (!dict.ContainsKey("severity") && dict.TryGetValue("moodCode", out var codeObj))
+                {
+                    var code = codeObj switch
+                    {
+                        JsonElement el when el.ValueKind == JsonValueKind.String => el.GetString() ?? "",
+                        _ => codeObj?.ToString() ?? ""
+                    };
+                    dict["severity"] = code switch { "worse" => 3, "tired" => 2, _ => 1 };
+                }
+                if (!dict.ContainsKey("notifyDoctor"))
+                    dict["notifyDoctor"] = true;
                 break;
 
             case var _ when eventType.Equals(AiTriageUrgencyDetermined, StringComparison.OrdinalIgnoreCase):
                 MapField(dict, "urgencyLevel", "urgencyLevel", "urgency");
                 MapField(dict, "recommendedSpecialization", "recommendedSpecialization", "specialization", "specialty");
-                MapField(dict, "recommendation", "recommendation", "recommendationText", "route");
+                MapField(dict, "recommendation", "recommendation", "recommendationText");
                 break;
         }
 

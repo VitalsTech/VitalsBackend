@@ -71,7 +71,7 @@ public sealed class CreatePrescriptionRequestDtoValidator : AbstractValidator<Cr
         RuleForEach(x => x.Medications).ChildRules(m =>
         {
             m.RuleFor(x => x.TradeName).NotEmpty().MaximumLength(200);
-            m.RuleFor(x => x.Inn).NotEmpty();
+            m.RuleFor(x => x.Inn).MaximumLength(200);
             m.RuleFor(x => x.CourseDays).GreaterThan(0).LessThanOrEqualTo(365);
         });
     }

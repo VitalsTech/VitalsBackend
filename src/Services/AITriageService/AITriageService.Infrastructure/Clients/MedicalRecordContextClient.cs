@@ -61,9 +61,10 @@ public sealed class MedicalRecordContextClient : IMedicalRecordContextClient
             urgencyLevel = result.UrgencyLevel,
             recommendedSpecialization = "Терапевт",
             recommendation = result.RecommendedAction,
+            canBeRemote = result.UrgencyLevel <= 3,
             route = new[]
             {
-                "ИИ-триаж завершён",
+                "ИИ-триаж",
                 "Запись к терапевту",
                 "Консультация и назначение лечения"
             }
@@ -85,6 +86,48 @@ public sealed class MedicalRecordContextClient : IMedicalRecordContextClient
         var response = await _http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
             _logger.LogWarning("Failed to append triage event for {PatientId}: {Status}", patientId, response.StatusCode);
+    }
+
+    public async Task<bool> DoctorHasAccessAsync(
+        Guid patientId,
+        IReadOnlyList<Guid> doctorIdentityIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (doctorIdentityIds.Count == 0)
+            return false;
+
+        var ids = string.Join(',', doctorIdentityIds.Distinct());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"internal/medical-records/patients/{patientId}/doctor-access?doctorIds={Uri.EscapeDataString(ids)}");
+        request.Headers.TryAddWithoutValidation("X-Service-Name", "ai-triage");
+        request.Headers.TryAddWithoutValidation("X-User-Id", Guid.Empty.ToString());
+
+        try
+        {
+            var response = await _http.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Doctor access check failed for patient {PatientId}: {Status}",
+                    patientId,
+                    response.StatusCode);
+                return false;
+            }
+
+            var body = await response.Content.ReadFromJsonAsync<DoctorAccessResponse>(cancellationToken: cancellationToken);
+            return body?.Allowed == true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Doctor access check error for patient {PatientId}", patientId);
+            return false;
+        }
+    }
+
+    private sealed class DoctorAccessResponse
+    {
+        public bool Allowed { get; set; }
     }
 
     private sealed class MedicalRecordStateResponse

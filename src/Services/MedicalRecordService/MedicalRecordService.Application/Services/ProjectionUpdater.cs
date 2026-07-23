@@ -88,13 +88,14 @@ public sealed class ProjectionUpdater
                 }, cancellationToken);
                 break;
 
+            case MedicalEventTypes.MoodCheck:
             case MedicalEventTypes.VitalSignRecorded:
                 await _projections.ApplyVitalSignAsync(new PatientVitalSignProjection
                 {
                     PatientId = medicalEvent.PatientId,
                     SourceEventId = medicalEvent.EventId,
-                    VitalType = GetString(root, "vitalType") ?? "",
-                    Value = GetString(root, "value") ?? "",
+                    VitalType = GetString(root, "vitalType") ?? "mood",
+                    Value = GetString(root, "value") ?? GetString(root, "mood") ?? "",
                     Unit = GetString(root, "unit"),
                     RecordedAt = medicalEvent.OccurredAt
                 }, cancellationToken);

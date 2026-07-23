@@ -10,8 +10,16 @@ namespace UserService.API.Validators
             RuleFor(x => x.UserPublicId)
                 .NotEmpty().WithMessage("UserPublicId is required");
 
+            // AuthService activates by profileType (Patient/Doctor) without knowing ProfileId yet.
+            // Internal switch-profile resolves ProfileId from ProfileType before switching.
             RuleFor(x => x.ProfileId)
-                .NotEmpty().WithMessage("ProfileId is required");
+                .NotEmpty()
+                .When(x => string.IsNullOrWhiteSpace(x.ProfileType))
+                .WithMessage("ProfileId is required when ProfileType is not set");
+
+            RuleFor(x => x)
+                .Must(x => x.ProfileId != Guid.Empty || !string.IsNullOrWhiteSpace(x.ProfileType))
+                .WithMessage("Either ProfileId or ProfileType is required");
         }
     }
 }

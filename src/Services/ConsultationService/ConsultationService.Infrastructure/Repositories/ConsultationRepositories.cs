@@ -50,6 +50,16 @@ public sealed class ConsultationRepository : IConsultationRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<ConsultationSession?> FindLatestByPatientAsync(
+        Guid patientId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.PatientId == patientId)
+            .OrderByDescending(s => s.LastActivityAt)
+            .ThenByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task SaveSessionAsync(ConsultationSession session, CancellationToken cancellationToken = default)
     {
         if (_db.Entry(session).State == EntityState.Detached)

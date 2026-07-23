@@ -111,7 +111,7 @@ public sealed class NotificationAppService : INotificationService
 
     public async Task<IReadOnlyList<UserPreferenceDto>> GetPreferencesAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        var categories = new[] { "consultations", "messages", "labs", "prescriptions", "payments", "marketing", "system" };
+        var categories = new[] { "consultations", "messages", "labs", "prescriptions", "payments", "marketing", "system", "mood", "triage" };
         var result = new List<UserPreferenceDto>();
 
         foreach (var category in categories)

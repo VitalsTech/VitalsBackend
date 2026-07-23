@@ -94,8 +94,16 @@ public sealed class EventChannelRouter : IEventChannelRouter
             ("emergency.required.sms", "Sms"),
             ("emergency.required.voice", "Voice")
         ]),
-        ["triage.completed"] = ("system", [
+        ["triage.completed"] = ("triage", [
             ("triage.completed.push", "Push")
+        ]),
+        ["patient.mood.updated"] = ("mood", [
+            ("patient.mood.updated.push", "Push"),
+            ("patient.mood.updated.email", "Email")
+        ]),
+        ["patient.triage.completed"] = ("triage", [
+            ("patient.triage.completed.push", "Push"),
+            ("patient.triage.completed.email", "Email")
         ]),
         ["system.maintenance"] = ("system", [
             ("system.maintenance.push", "Push"),

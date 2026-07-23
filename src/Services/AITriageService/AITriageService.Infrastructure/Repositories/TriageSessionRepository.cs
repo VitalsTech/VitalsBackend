@@ -17,6 +17,18 @@ public sealed class TriageSessionRepository : ITriageSessionRepository
             .Include(s => s.Assessments)
             .FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
 
+    public async Task<IReadOnlyList<TriageSession>> GetByPatientIdAsync(
+        Guid patientId,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        await _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.Assessments)
+            .Where(s => s.PatientId == patientId)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Take(Math.Clamp(limit, 1, 50))
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(TriageSession session, CancellationToken cancellationToken = default) =>
         await _db.Sessions.AddAsync(session, cancellationToken);
 

@@ -2,6 +2,7 @@ using MedicalRecordService.Application.Interfaces;
 using MedicalRecordService.Application.Options;
 using MedicalRecordService.Application.Services;
 using MedicalRecordService.Domain.Interfaces;
+using MedicalRecordService.Infrastructure.Clients;
 using MedicalRecordService.Infrastructure.Data;
 using MedicalRecordService.Infrastructure.Messaging;
 using MedicalRecordService.Infrastructure.Repositories;
@@ -20,6 +21,7 @@ public static class DependencyInjection
     {
         services.Configure<MedicalRecordOptions>(configuration.GetSection(MedicalRecordOptions.SectionName));
         services.Configure<KafkaOptions>(configuration.GetSection(KafkaOptions.SectionName));
+        services.Configure<ConsultationServiceOptions>(configuration.GetSection(ConsultationServiceOptions.SectionName));
         services.AddVitalsKafka(configuration, options =>
         {
             var kafka = configuration.GetSection(KafkaOptions.SectionName).Get<KafkaOptions>() ?? new KafkaOptions();
@@ -38,6 +40,9 @@ public static class DependencyInjection
         services.AddScoped<IAccessGrantRepository, AccessGrantRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IPatientAttachmentRepository, PatientAttachmentRepository>();
+
+        services.AddHttpClient<IConsultationDoctorClient, ConsultationDoctorClient>();
+        services.AddScoped<IDoctorRecipientResolver, DoctorRecipientResolver>();
 
         services.AddScoped<ProjectionUpdater>();
         services.AddScoped<IAccessControlService, AccessControlService>();
