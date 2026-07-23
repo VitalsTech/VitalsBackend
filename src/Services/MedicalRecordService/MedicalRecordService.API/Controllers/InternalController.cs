@@ -13,15 +13,18 @@ public class InternalController : ControllerBase
 {
     private readonly IMedicalEventService _events;
     private readonly IPatientRecordQueryService _queries;
+    private readonly IAccessGrantService _grants;
     private readonly IOptions<JwtValidationOptions> _jwtOptions;
 
     public InternalController(
         IMedicalEventService events,
         IPatientRecordQueryService queries,
+        IAccessGrantService grants,
         IOptions<JwtValidationOptions> jwtOptions)
     {
         _events = events;
         _queries = queries;
+        _grants = grants;
         _jwtOptions = jwtOptions;
     }
 
@@ -35,6 +38,19 @@ public class InternalController : ControllerBase
         actor.IsSystemService = true;
         actor.ServiceName = request.SourceService;
         var result = await _events.AppendEventAsync(patientId, request, actor, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("access-grants")]
+    public async Task<ActionResult<AccessGrantDto>> CreateAccessGrant(
+        Guid patientId,
+        [FromBody] CreateAccessGrantRequest request,
+        CancellationToken cancellationToken)
+    {
+        var actor = ActorContextFactory.FromHttpContext(HttpContext, _jwtOptions);
+        actor.IsSystemService = true;
+        actor.ServiceName = "consultation-service";
+        var result = await _grants.CreateGrantAsync(patientId, request, actor, cancellationToken);
         return Ok(result);
     }
 

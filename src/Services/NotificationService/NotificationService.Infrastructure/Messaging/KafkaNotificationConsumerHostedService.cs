@@ -54,21 +54,27 @@ public sealed class KafkaNotificationConsumerHostedService : KafkaConsumerHosted
         return topic switch
         {
             "consultation.created" => MapConsultationCreated(root),
-            "auto_response_required" => [CreateEvent("auto_response_required", GetGuid(root, "PatientId"), "Low", new Dictionary<string, string>
+            "message.new" => [CreateEvent("message.new", GetGuid(root, "RecipientId", "recipientId", "PatientId", "patientId"), "Medium", new Dictionary<string, string>
             {
-                ["question"] = GetString(root, "Question") ?? string.Empty
+                ["preview"] = GetString(root, "Preview", "preview") ?? string.Empty,
+                ["sender_name"] = GetString(root, "SenderName", "senderName") ?? string.Empty,
+                ["sender_role"] = GetString(root, "SenderRole", "senderRole") ?? string.Empty
             })],
-            "prescription.issued" or "prescription.created" => [CreateEvent("prescription.issued", GetGuid(root, "PatientId"), "Medium", new Dictionary<string, string>())],
-            "prescription.expiring_soon" => [CreateEvent("prescription.expiring_soon", GetGuid(root, "PatientId"), "Low", new Dictionary<string, string>())],
-            _ => [CreateEvent(topic, GetGuid(root, "PatientId", "UserId"), "Medium", new Dictionary<string, string>())]
+            "auto_response_required" => [CreateEvent("auto_response_required", GetGuid(root, "PatientId", "patientId"), "Low", new Dictionary<string, string>
+            {
+                ["question"] = GetString(root, "Question", "question") ?? string.Empty
+            })],
+            "prescription.issued" or "prescription.created" => [CreateEvent("prescription.issued", GetGuid(root, "PatientId", "patientId"), "Medium", new Dictionary<string, string>())],
+            "prescription.expiring_soon" => [CreateEvent("prescription.expiring_soon", GetGuid(root, "PatientId", "patientId"), "Low", new Dictionary<string, string>())],
+            _ => [CreateEvent(topic, GetGuid(root, "PatientId", "patientId", "UserId", "userId"), "Medium", new Dictionary<string, string>())]
         };
     }
 
     private static List<NotificationEventDto> MapConsultationCreated(JsonElement root)
     {
-        var patientId = GetGuid(root, "PatientId");
-        var doctorId = GetGuid(root, "DoctorId");
-        var doctorName = GetString(root, "DoctorName") ?? "врач";
+        var patientId = GetGuid(root, "PatientId", "patientId");
+        var doctorId = GetGuid(root, "DoctorId", "doctorId");
+        var doctorName = GetString(root, "DoctorName", "doctorName") ?? "врач";
 
         return
         [
@@ -80,7 +86,7 @@ public sealed class KafkaNotificationConsumerHostedService : KafkaConsumerHosted
             CreateEvent("consultation.created", doctorId, "High", new Dictionary<string, string>
             {
                 ["recipient_role"] = "doctor"
-            }, patientId)
+            })
         ];
     }
 
@@ -117,6 +123,14 @@ public sealed class KafkaNotificationConsumerHostedService : KafkaConsumerHosted
         throw new InvalidOperationException($"Payload is missing required identifier: {string.Join('/', names)}");
     }
 
-    private static string? GetString(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var value) ? value.GetString() : null;
+    private static string? GetString(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+                return value.GetString();
+        }
+
+        return null;
+    }
 }

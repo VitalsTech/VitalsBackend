@@ -21,6 +21,7 @@
 | ----- | ------------------------------------ | ------------------------------------- |
 | POST  | `/api/triage/sessions`               | Создать сессию триажа                 |
 | POST  | `/api/triage/sessions/{id}/messages` | Сообщение пациента → ответ ассистента |
+| POST  | `/api/triage/sessions/{id}/complete` | **Завершить триаж** (mock-маршрут, если нет оценки LLM) |
 | GET   | `/api/triage/sessions/{id}`          | Сессия + последняя оценка             |
 
 
@@ -34,6 +35,24 @@
 4. LLM-заглушка возвращает гипотезы, urgency (1–5), следующий вопрос, рекомендацию.
 5. Публикуется `triage.completed` (лог).
 6. Ответ пациенту с disclaimer.
+
+## Завершение триажа (mock)
+
+`POST /api/v1/triage/sessions/{sessionId}/complete` (через gateway) или `POST /api/triage/sessions/{id}/complete` напрямую.
+
+Если пациент не успел получить оценку LLM (мало сообщений), сервис подставляет **mock-данные**:
+
+| Поле | Mock-значение | Куда попадает |
+| ---- | ------------- | ------------- |
+| `urgencyLevel` | `2` (плановая) | Ответ API `latestUrgencyLevel`, поле `urgency` = `routine` |
+| `recommendedSpecialization` | `"Терапевт"` | Ответ API |
+| `recommendation` / `recommendationText` | `"Запись к терапевту в течение 3 дней…"` | Ответ API, экран «Результат триажа» |
+| `canBeRemote` | `true` при urgency ≤ 3 | Ответ API |
+| Событие медкарты | `AiTriageUrgencyDetermined` | `POST internal/medical-records/patients/{patientId}/events` |
+| Payload события | `{ sessionId, urgencyLevel, recommendedSpecialization, recommendation, route[] }` | Страница «Мой путь» (`/patient/home`) — блок «Маршрут лечения» |
+| Kafka | `triage.completed` | RoutingService (заглушка) |
+
+`patientId` в сессии триажа — **ProfileId** пациента (из JWT claim `profile_id`), тот же id, что использует фронтенд в `useAuth().patientId`.
 
 ## Пример
 

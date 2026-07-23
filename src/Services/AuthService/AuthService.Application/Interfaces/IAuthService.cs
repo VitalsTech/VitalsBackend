@@ -13,4 +13,5 @@ public interface IAuthenticationService
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
     Task<TokenPairResponse> CompleteEsiaLoginAsync(string code, string? ipAddress, string? deviceFingerprint, CancellationToken cancellationToken = default);
     Task LinkEsiaAsync(Guid userPublicId, string code, string currentPassword, CancellationToken cancellationToken = default);
+    Task<TokenPairResponse> SwitchProfileAsync(Guid userPublicId, SwitchProfileRequest request, string? ipAddress, CancellationToken cancellationToken = default);
 }

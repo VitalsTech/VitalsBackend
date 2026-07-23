@@ -35,7 +35,12 @@ public sealed class JwtTokenService : IJwtTokenService
             new(JwtRegisteredClaimNames.Iat, EpochSeconds(now).ToString(), ClaimValueTypes.Integer64)
         };
 
-        claims.AddRange(roles.Distinct().Select(r => new Claim(ClaimTypes.Role, r)));
+        claims.AddRange(roles.Distinct().SelectMany(r => new[]
+        {
+            new Claim("role", r),
+            // Dual claim for handlers that still map inbound claim types.
+            new Claim(ClaimTypes.Role, r)
+        }));
         claims.AddRange(scopes.Distinct().Select(s => new Claim("scope", s)));
         if (profileIds is not null)
             claims.AddRange(profileIds.Distinct().Select(id => new Claim("profile_id", id.ToString())));

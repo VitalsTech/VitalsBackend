@@ -47,7 +47,7 @@ public sealed class NotificationsController : ControllerBase
         [FromQuery] int limit = 50,
         CancellationToken cancellationToken = default)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _notifications.GetUserHistoryAsync(userId, limit, cancellationToken));
+        var userIds = UserClaims.GetIdentityIds(User);
+        return Ok(await _notifications.GetUserHistoryAsync(userIds, limit, cancellationToken));
     }
 }

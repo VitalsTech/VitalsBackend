@@ -20,6 +20,8 @@ public sealed class LoginRequestDto
     public string PhoneNumber { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string? DeviceFingerprint { get; set; }
+    /// <summary>Patient | Doctor | Organization — activates matching profile before JWT is issued.</summary>
+    public string? PreferredProfileType { get; set; }
 }
 
 public sealed class RefreshTokenRequestDto

@@ -64,13 +64,15 @@ public sealed class MedicalEventService : IMedicalEventService
         }
 
         var version = await _events.GetLatestVersionAsync(patientId, cancellationToken) + 1;
+        var eventType = MedicalEventTypes.NormalizeAppendEventType(request.EventType);
+        var payload = MedicalEventTypes.NormalizeAppendPayload(eventType, request.Payload);
         var medicalEvent = new MedicalEvent
         {
             EventId = request.EventId,
             PatientId = patientId,
-            EventType = request.EventType,
+            EventType = eventType,
             Version = version,
-            PayloadJson = request.Payload.GetRawText(),
+            PayloadJson = payload.GetRawText(),
             SourceService = request.SourceService,
             CorrelationId = request.CorrelationId,
             ActorUserId = actor.UserId,

@@ -124,6 +124,49 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
         return MapSession(session);
     }
 
+    /// <summary>
+    /// Marks triage as completed. If no LLM assessment exists yet, uses mock routing data
+    /// (see docs/AITriageService.md — «Завершение триажа (mock)»).
+    /// </summary>
+    public async Task<TriageSessionResponse> CompleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            ?? throw new TriageNotFoundException(sessionId);
+
+        var latestAssessment = session.Assessments.OrderByDescending(a => a.CreatedAt).FirstOrDefault();
+        LlmTriageResultDto llmResult;
+
+        if (latestAssessment is null)
+        {
+            llmResult = new LlmTriageResultDto
+            {
+                UrgencyLevel = 2,
+                RecommendedAction = "Запись к терапевту в течение 3 дней. При ухудшении — срочная консультация.",
+                NextQuestion = string.Empty,
+                EmergencyWarning = false
+            };
+            session.LatestUrgencyLevel = llmResult.UrgencyLevel;
+        }
+        else
+        {
+            llmResult = JsonSerializer.Deserialize<LlmTriageResultDto>(latestAssessment.LlmResultJson) ?? new LlmTriageResultDto
+            {
+                UrgencyLevel = latestAssessment.UrgencyLevel,
+                RecommendedAction = latestAssessment.AssistantReply
+            };
+        }
+
+        session.Status = "Completed";
+        session.UpdatedAt = DateTime.UtcNow;
+        await _sessions.SaveChangesAsync(cancellationToken);
+
+        await _publisher.PublishTriageCompletedAsync(sessionId, session.PatientId, llmResult, cancellationToken);
+        await _medicalRecord.AppendTriageCompletedEventAsync(session.PatientId, sessionId, llmResult, cancellationToken);
+
+        _logger.LogInformation("Triage session {SessionId} completed for patient {PatientId}", sessionId, session.PatientId);
+        return MapSession(session);
+    }
+
     public async Task<TriageSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
@@ -145,8 +188,29 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
                 .OrderBy(m => m.CreatedAt)
                 .Select(m => new TriageMessageDto { Role = m.Role, Content = m.Content, CreatedAt = m.CreatedAt })
                 .ToList(),
-            LatestAssessment = latestAssessment is null ? null : MapAssessment(latestAssessment)
+            LatestAssessment = latestAssessment is null ? null : MapAssessment(latestAssessment),
+            Urgency = MapUrgencyLabel(session.LatestUrgencyLevel),
+            Recommendation = latestAssessment?.AssistantReply,
+            RecommendationText = latestAssessment?.AssistantReply ?? BuildRecommendation(latestAssessment),
+            RecommendedSpecialization = "Терапевт",
+            CanBeRemote = session.LatestUrgencyLevel <= 3
         };
+    }
+
+    private static string MapUrgencyLabel(int level) => level switch
+    {
+        >= 5 => "emergency",
+        >= 4 => "urgent",
+        _ => "routine"
+    };
+
+    private static string? BuildRecommendation(TriageAssessment? assessment)
+    {
+        if (assessment is null)
+            return null;
+
+        var llm = JsonSerializer.Deserialize<LlmTriageResultDto>(assessment.LlmResultJson);
+        return llm?.RecommendedAction;
     }
 
     private static TriageAssessmentDto MapAssessment(TriageAssessment assessment) => new()

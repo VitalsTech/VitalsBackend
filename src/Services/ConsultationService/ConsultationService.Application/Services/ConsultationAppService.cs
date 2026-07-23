@@ -82,6 +82,29 @@ public sealed class ConsultationAppService : IConsultationService
             request.TriageSessionId,
             cancellationToken);
 
+    public async Task<ConsultationSessionResponse?> FindActiveAsync(
+        Guid patientId,
+        Guid doctorId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.FindActiveBetweenAsync(patientId, doctorId, cancellationToken: cancellationToken);
+        return session is null ? null : MapSession(session);
+    }
+
+    public async Task<ConsultationSessionResponse> OpenOrCreateAsync(
+        CreateConsultationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await _sessions.FindActiveBetweenAsync(
+            request.PatientId,
+            request.DoctorId,
+            cancellationToken: cancellationToken);
+        if (existing is not null)
+            return MapSession(existing);
+
+        return await CreateManualAsync(request, cancellationToken);
+    }
+
     public async Task<ConsultationSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
@@ -93,12 +116,14 @@ public sealed class ConsultationAppService : IConsultationService
         Guid sessionId,
         Guid userId,
         ParticipantRole role,
+        IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
 
-        EnsureParticipant(session, userId, role);
+        var ids = NormalizeIds(userId, identityIds);
+        EnsureParticipant(session, ids, role);
         EnsureNotTerminal(session);
 
         var targetStatus = role switch
@@ -120,8 +145,15 @@ public sealed class ConsultationAppService : IConsultationService
         if (session.Status == ConsultationStatus.Active && session.StartedAt is null)
             session.StartedAt = DateTime.UtcNow;
 
+        // Joining a chat implies data-processing consent (frontend often skips explicit consent call).
+        if (role == ParticipantRole.Patient && !session.PatientConsentGiven)
+        {
+            session.PatientConsentGiven = true;
+            session.PatientConsentAt = DateTime.UtcNow;
+        }
+
         session.LastActivityAt = DateTime.UtcNow;
-        await _sessions.AddParticipantAsync(new SessionParticipant
+        var isNewParticipant = await _sessions.AddParticipantAsync(new SessionParticipant
         {
             Id = Guid.NewGuid(),
             SessionId = session.Id,
@@ -133,25 +165,35 @@ public sealed class ConsultationAppService : IConsultationService
         await _sessions.SaveSessionAsync(session, cancellationToken);
         await SyncStateStoreAsync(session, cancellationToken);
 
-        var systemText = role == ParticipantRole.Doctor
-            ? "Врач подключился к консультации."
-            : "Пациент подключился к консультации.";
-        await SendSystemMessageAsync(session, systemText, cancellationToken);
+        if (role == ParticipantRole.Doctor)
+            await _medicalRecord.GrantDoctorAccessAsync(session.PatientId, session.DoctorId, cancellationToken);
 
-        await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "ConsultationJoined", new
+        if (isNewParticipant)
         {
-            session.Id,
-            userId,
-            Role = role.ToString(),
-            session.Status
-        }, session.Id, cancellationToken);
+            var systemText = role == ParticipantRole.Doctor
+                ? "Врач подключился к консультации."
+                : "Пациент подключился к консультации.";
+            await SendSystemMessageAsync(session, systemText, cancellationToken);
+
+            await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "ConsultationJoined", new
+            {
+                session.Id,
+                userId,
+                Role = role.ToString(),
+                session.Status
+            }, session.Id, cancellationToken);
+        }
 
         return MapSession(session);
     }
 
-    public async Task<ConsultationSessionResponse> PauseAsync(Guid sessionId, Guid doctorId, CancellationToken cancellationToken = default)
+    public async Task<ConsultationSessionResponse> PauseAsync(
+        Guid sessionId,
+        Guid doctorId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
     {
-        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken);
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
         await TransitionAsync(session, ConsultationStatus.Paused, "doctor", doctorId, null, cancellationToken);
         session.PausedAt = DateTime.UtcNow;
         await _sessions.SaveSessionAsync(session, cancellationToken);
@@ -160,9 +202,13 @@ public sealed class ConsultationAppService : IConsultationService
         return MapSession(session);
     }
 
-    public async Task<ConsultationSessionResponse> ResumeAsync(Guid sessionId, Guid doctorId, CancellationToken cancellationToken = default)
+    public async Task<ConsultationSessionResponse> ResumeAsync(
+        Guid sessionId,
+        Guid doctorId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
     {
-        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken);
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
         if (session.Status != ConsultationStatus.Paused)
             return MapSession(session);
 
@@ -174,9 +220,13 @@ public sealed class ConsultationAppService : IConsultationService
         return MapSession(session);
     }
 
-    public async Task<ConsultationSessionResponse> DoctorLeaveAsync(Guid sessionId, Guid doctorId, CancellationToken cancellationToken = default)
+    public async Task<ConsultationSessionResponse> DoctorLeaveAsync(
+        Guid sessionId,
+        Guid doctorId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
     {
-        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken);
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
         await TransitionAsync(session, ConsultationStatus.DoctorLeft, "doctor", doctorId, null, cancellationToken);
         await _sessions.SaveSessionAsync(session, cancellationToken);
         await SendSystemMessageAsync(session, "Врач завершил консультацию. Подтвердите, что всё понятно.", cancellationToken);
@@ -188,9 +238,10 @@ public sealed class ConsultationAppService : IConsultationService
         Guid sessionId,
         Guid doctorId,
         CompleteConsultationRequest request,
+        IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
-        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken);
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
         session.ProtocolJson = JsonSerializer.Serialize(request);
 
         var signResult = await _signature.SignAsync(new SignDocumentRequest
@@ -220,12 +271,16 @@ public sealed class ConsultationAppService : IConsultationService
         return MapSession(session);
     }
 
-    public async Task<ConsultationSessionResponse> PatientConfirmAsync(Guid sessionId, Guid patientId, CancellationToken cancellationToken = default)
+    public async Task<ConsultationSessionResponse> PatientConfirmAsync(
+        Guid sessionId,
+        Guid patientId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
 
-        if (session.PatientId != patientId)
+        if (!Matches(session.PatientId, patientId, identityIds))
             throw new UnauthorizedAccessException("Only the patient can confirm completion.");
 
         if (session.Status is not (ConsultationStatus.DoctorLeft or ConsultationStatus.Active))
@@ -262,12 +317,14 @@ public sealed class ConsultationAppService : IConsultationService
         Guid sessionId,
         Guid userId,
         string reason,
+        IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
 
-        if (userId != session.PatientId && userId != session.DoctorId)
+        var ids = NormalizeIds(userId, identityIds);
+        if (!ids.Contains(session.PatientId) && !ids.Contains(session.DoctorId))
             throw new UnauthorizedAccessException("Not a session participant.");
 
         EnsureNotTerminal(session);
@@ -289,12 +346,13 @@ public sealed class ConsultationAppService : IConsultationService
         Guid sessionId,
         Guid patientId,
         ConsentRequest request,
+        IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
 
-        if (session.PatientId != patientId)
+        if (!Matches(session.PatientId, patientId, identityIds))
             throw new UnauthorizedAccessException("Only the patient can record consent.");
 
         if (!request.DataProcessingConsent)
@@ -322,25 +380,31 @@ public sealed class ConsultationAppService : IConsultationService
         Guid senderId,
         ParticipantRole role,
         SendMessageRequest request,
+        IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
 
         EnsureNotTerminal(session);
-
         if (!Enum.TryParse<MessageType>(request.MessageType, true, out var messageType))
             messageType = MessageType.Text;
 
-        if (role == ParticipantRole.Patient && !session.PatientConsentGiven && messageType != MessageType.System)
-            throw new InvalidOperationException("Patient must accept consent before messaging.");
+        // System messages are emitted by the service itself (senderId empty).
+        if (messageType != MessageType.System && senderId != Guid.Empty)
+            EnsureParticipant(session, NormalizeIds(senderId, identityIds), role);
 
-        var sequence = session.LastSequenceNumber + 1;
+        // Auto-consent on first patient message when UI skipped consent endpoint.
+        if (role == ParticipantRole.Patient && !session.PatientConsentGiven && messageType != MessageType.System)
+        {
+            session.PatientConsentGiven = true;
+            session.PatientConsentAt = DateTime.UtcNow;
+        }
+
         var message = new ConsultationMessage
         {
             Id = Guid.NewGuid(),
             SessionId = sessionId,
-            SequenceNumber = sequence,
             SenderId = senderId,
             SenderRole = role,
             MessageType = messageType,
@@ -350,15 +414,11 @@ public sealed class ConsultationAppService : IConsultationService
             SentAt = DateTime.UtcNow
         };
 
-        await _messages.AddMessageAsync(message, cancellationToken);
-
-        session.LastSequenceNumber = sequence;
-        session.LastMessageId = message.Id;
-        session.LastActivityAt = DateTime.UtcNow;
+        await _messages.AddMessageAsync(session, message, cancellationToken);
 
         if (role == ParticipantRole.Patient)
             session.DoctorUnreadCount++;
-        else
+        else if (messageType != MessageType.System)
             session.PatientUnreadCount++;
 
         if (session.Status is ConsultationStatus.DoctorJoined or ConsultationStatus.PatientJoined)
@@ -372,6 +432,25 @@ public sealed class ConsultationAppService : IConsultationService
 
         var dto = MapMessage(message);
         await _notifier.NotifyMessageAsync(sessionId, dto, cancellationToken);
+
+        var recipientId = role == ParticipantRole.Patient ? session.DoctorId : session.PatientId;
+        if (messageType != MessageType.System)
+        {
+            var senderName = role == ParticipantRole.Doctor
+                ? (session.DoctorName ?? "Врач")
+                : "Пациент";
+            var previewText = request.Content.Length > 120 ? request.Content[..120] : request.Content;
+            await _publisher.PublishAsync("message.new", new
+            {
+                SessionId = sessionId,
+                PatientId = session.PatientId,
+                DoctorId = session.DoctorId,
+                RecipientId = recipientId,
+                SenderRole = role.ToString(),
+                SenderName = senderName,
+                Preview = $"{senderName}: {previewText}"
+            }, cancellationToken);
+        }
 
         await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "ConsultationMessage", new
         {
@@ -396,12 +475,17 @@ public sealed class ConsultationAppService : IConsultationService
         return messages.Select(MapMessage).ToList();
     }
 
-    public async Task<VideoRoomResponse> StartVideoAsync(Guid sessionId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<VideoRoomResponse> StartVideoAsync(
+        Guid sessionId,
+        Guid userId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
 
-        if (userId != session.PatientId && userId != session.DoctorId)
+        var ids = NormalizeIds(userId, identityIds);
+        if (!ids.Contains(session.PatientId) && !ids.Contains(session.DoctorId))
             throw new UnauthorizedAccessException("Not a session participant.");
 
         EnsureNotTerminal(session);
@@ -550,6 +634,8 @@ public sealed class ConsultationAppService : IConsultationService
 
         await SyncStateStoreAsync(session, cancellationToken);
 
+        await _medicalRecord.GrantDoctorAccessAsync(patientId, doctorId, cancellationToken);
+
         await _medicalRecord.AppendConsultationEventAsync(patientId, "ConsultationStarted", new
         {
             session.Id,
@@ -564,6 +650,7 @@ public sealed class ConsultationAppService : IConsultationService
             session.Id,
             session.PatientId,
             session.DoctorId,
+            session.DoctorName,
             session.Type,
             session.UrgencyLevel,
             session.RoutingDecisionId
@@ -605,11 +692,17 @@ public sealed class ConsultationAppService : IConsultationService
 
     private async Task SendSystemMessageAsync(ConsultationSession session, string text, CancellationToken cancellationToken)
     {
-        await SendMessageAsync(session.Id, Guid.Empty, ParticipantRole.Doctor, new SendMessageRequest
-        {
-            MessageType = nameof(MessageType.System),
-            Content = text
-        }, cancellationToken);
+        await SendMessageAsync(
+            session.Id,
+            Guid.Empty,
+            ParticipantRole.Doctor,
+            new SendMessageRequest
+            {
+                MessageType = nameof(MessageType.System),
+                Content = text
+            },
+            identityIds: null,
+            cancellationToken: cancellationToken);
     }
 
     private async Task SyncStateStoreAsync(ConsultationSession session, CancellationToken cancellationToken) =>
@@ -624,21 +717,40 @@ public sealed class ConsultationAppService : IConsultationService
     private async Task<ConsultationSession> RequireDoctorSessionAsync(
         Guid sessionId,
         Guid doctorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<Guid>? identityIds = null)
     {
         var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
             ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
-        if (session.DoctorId != doctorId)
+        if (!Matches(session.DoctorId, doctorId, identityIds))
             throw new UnauthorizedAccessException("Only the assigned doctor can perform this action.");
         EnsureNotTerminal(session);
         return session;
     }
 
-    private static void EnsureParticipant(ConsultationSession session, Guid userId, ParticipantRole role)
+    private static IReadOnlyList<Guid> NormalizeIds(Guid primary, IReadOnlyList<Guid>? identityIds)
     {
-        if (role == ParticipantRole.Patient && session.PatientId != userId)
+        if (identityIds is null || identityIds.Count == 0)
+            return [primary];
+
+        var set = new List<Guid> { primary };
+        foreach (var id in identityIds)
+        {
+            if (id != Guid.Empty && !set.Contains(id))
+                set.Add(id);
+        }
+
+        return set;
+    }
+
+    private static bool Matches(Guid sessionPartyId, Guid userId, IReadOnlyList<Guid>? identityIds) =>
+        NormalizeIds(userId, identityIds).Contains(sessionPartyId);
+
+    private static void EnsureParticipant(ConsultationSession session, IReadOnlyList<Guid> identityIds, ParticipantRole role)
+    {
+        if (role == ParticipantRole.Patient && !identityIds.Contains(session.PatientId))
             throw new UnauthorizedAccessException("Invalid patient.");
-        if (role == ParticipantRole.Doctor && session.DoctorId != userId)
+        if (role == ParticipantRole.Doctor && !identityIds.Contains(session.DoctorId))
             throw new UnauthorizedAccessException("Invalid doctor.");
     }
 

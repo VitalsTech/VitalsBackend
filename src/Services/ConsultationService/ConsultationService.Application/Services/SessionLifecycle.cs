@@ -29,8 +29,28 @@ internal static class SessionLifecycle
             _ => false
         };
 
-    public static ConsultationType ParseType(string? format) =>
-        Enum.TryParse<ConsultationType>(format, true, out var parsed) ? parsed : ConsultationType.SyncChat;
+    public static ConsultationType ParseType(string? format)
+    {
+        if (string.IsNullOrWhiteSpace(format))
+            return ConsultationType.SyncChat;
+
+        var key = format.Trim().ToLowerInvariant()
+            .Replace("_", string.Empty)
+            .Replace("-", string.Empty)
+            .Replace(" ", string.Empty);
+
+        return key switch
+        {
+            "syncchat" or "sync" or "chat" or "text" or "textchat" or "1" => ConsultationType.SyncChat,
+            "video" or "videocall" or "videaconsultation" or "audio" or "audiocall" or "voice" or "call" or "2"
+                => ConsultationType.Video,
+            "async" or "asyncchat" or "offline" or "3" => ConsultationType.Async,
+            "inperson" or "clinic" or "4" => ConsultationType.InPerson,
+            "homevisit" or "home" or "5" => ConsultationType.HomeVisit,
+            _ when Enum.TryParse<ConsultationType>(format, true, out var parsed) => parsed,
+            _ => ConsultationType.SyncChat
+        };
+    }
 
     public static int DefaultDurationMinutes(ConsultationType type, ConsultationOptions options) =>
         type == ConsultationType.Video ? options.DefaultVideoDurationMinutes : options.DefaultChatDurationMinutes;

@@ -1,3 +1,4 @@
+using ApiGateway.Application.Consultations;
 using ApiGateway.Application.DTOs.Admin;
 using ApiGateway.Application.DTOs.Consultations;
 using ApiGateway.Application.DTOs.MedicalRecords;
@@ -20,19 +21,22 @@ public sealed class UserSearchRequestDtoValidator : AbstractValidator<UserSearch
 
 public sealed class CreateConsultationRequestDtoValidator : AbstractValidator<CreateConsultationRequestDto>
 {
-    private static readonly string[] AllowedTypes = ["SyncChat", "AsyncChat", "Video", "Audio"];
     private static readonly string[] AllowedUrgency = ["Normal", "Urgent", "Emergency"];
 
     public CreateConsultationRequestDtoValidator()
     {
         RuleFor(x => x.PatientId).NotEmpty();
         RuleFor(x => x.DoctorId).NotEmpty();
-        RuleFor(x => x.ConsultationType).Must(t => AllowedTypes.Contains(t, StringComparer.OrdinalIgnoreCase))
-            .WithMessage("ConsultationType must be SyncChat, AsyncChat, Video, or Audio.");
-        RuleFor(x => x.Urgency).Must(u => AllowedUrgency.Contains(u, StringComparer.OrdinalIgnoreCase))
+        RuleFor(x => x.ConsultationType)
+            .Must(ConsultationTypeNormalizer.IsAllowed)
+            .WithMessage("ConsultationType must be SyncChat, Video, Async, InPerson, or HomeVisit (aliases: chat, video, async/audio, inperson, homevisit; legacy AsyncChat/Audio accepted).");
+        RuleFor(x => x.Urgency)
+            .Must(u => string.IsNullOrWhiteSpace(u) || AllowedUrgency.Contains(u, StringComparer.OrdinalIgnoreCase))
             .WithMessage("Urgency must be Normal, Urgent, or Emergency.");
         RuleFor(x => x.PrimarySymptom).MaximumLength(2000);
-        RuleFor(x => x.UrgencyLevel).InclusiveBetween(1, 5);
+        // 0 = omitted/default from some clients; Create normalizes it to 3.
+        RuleFor(x => x.UrgencyLevel).Must(u => u == 0 || (u >= 1 && u <= 5))
+            .WithMessage("UrgencyLevel must be between 1 and 5.");
     }
 }
 

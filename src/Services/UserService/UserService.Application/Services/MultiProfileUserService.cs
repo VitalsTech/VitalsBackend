@@ -175,6 +175,13 @@ namespace UserService.Application.Services
                 throw new ValidationException($"Invalid profile type value. Allowed values: Patient, Doctor, Organization. Received: {request.ProfileType}");
             }
 
+            // Self-service add-profile may only create Patient. Doctor/Organization require registration or admin flow.
+            if (profileType is ProfileType.Doctor or ProfileType.Organization)
+            {
+                throw new ValidationException(
+                    "Doctor and Organization profiles cannot be added via self-service. Register with the desired profile or use an admin API.");
+            }
+
             var existingProfile = await _userRepository.GetProfileByUserAndTypeAsync(user.Id, profileType);
             if (existingProfile != null)
                 throw new InvalidOperationException($"User already has a {request.ProfileType} profile");
@@ -184,8 +191,6 @@ namespace UserService.Application.Services
             profile = profileType switch
             {
                 ProfileType.Patient when request.PatientProfile != null => await CreatePatientProfile(user.Id, request.PatientProfile),
-                ProfileType.Doctor when request.DoctorProfile != null => await CreateDoctorProfile(user.Id, request.DoctorProfile),
-                ProfileType.Organization when request.OrganizationProfile != null => await CreateOrganizationProfile(user.Id, request.OrganizationProfile),
                 _ => throw new ValidationException($"{profileType} profile data must be provided")
             };
 

@@ -16,6 +16,8 @@ public sealed class MedicalRecordsController : GatewayControllerBase
     public MedicalRecordsController(IBackendForwarder backend) => _backend = backend;
 
     [HttpPost("events")]
+    [ProducesResponseType(typeof(AppendEventResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public Task<IActionResult> AppendEvent(Guid patientId, [FromBody] AppendEventRequestDto request, CancellationToken cancellationToken)
     {
         var backendRequest = new
@@ -45,6 +47,8 @@ public sealed class MedicalRecordsController : GatewayControllerBase
     }
 
     [HttpGet("history")]
+    [ProducesResponseType(typeof(PatientHistoryResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public Task<IActionResult> GetHistory(
         Guid patientId,
         [FromQuery] DateTime? from,
@@ -61,6 +65,8 @@ public sealed class MedicalRecordsController : GatewayControllerBase
     }
 
     [HttpGet("state")]
+    [ProducesResponseType(typeof(PatientCurrentStateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public Task<IActionResult> GetState(Guid patientId, CancellationToken cancellationToken) =>
         Forward(_backend.ForwardAsync("medical", HttpMethod.Get, $"api/medical-records/patients/{patientId}/state", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
 

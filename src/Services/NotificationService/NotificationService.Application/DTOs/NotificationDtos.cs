@@ -24,10 +24,17 @@ public sealed class SendManualNotificationRequest
 public sealed class NotificationDeliveryResponse
 {
     public Guid DeliveryId { get; set; }
+    public Guid Id => DeliveryId;
     public Guid UserId { get; set; }
     public string EventType { get; set; } = string.Empty;
     public string Channel { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string? Subject { get; set; }
+    public string? Body { get; set; }
+    /// <summary>Frontend alias for Subject.</summary>
+    public string? Title => Subject;
+    /// <summary>Frontend alias for Body.</summary>
+    public string? Message => Body;
     public int AttemptCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }

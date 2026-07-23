@@ -82,6 +82,49 @@ public sealed class AuthenticationService : IAuthenticationService
         if (!_passwordHasher.Verify(request.Password, authUser.PasswordHash, authUser.PasswordSalt))
             throw new InvalidCredentialsException();
 
+        // Default login always activates Patient when present, so a dual-profile account
+        // cannot silently enter as Doctor. Explicit preferredProfileType=Doctor is required.
+        var preferred = string.IsNullOrWhiteSpace(request.PreferredProfileType)
+            ? "Patient"
+            : request.PreferredProfileType.Trim();
+
+        try
+        {
+            await _userServiceClient.ActivateProfileByTypeAsync(
+                authUser.UserPublicId,
+                preferred,
+                cancellationToken);
+        }
+        catch (AuthValidationException) when (preferred.Equals("Patient", StringComparison.OrdinalIgnoreCase))
+        {
+            // Account may be doctor-only — keep whatever profile is already active.
+        }
+
+        return await IssueTokenPairAsync(authUser, ipAddress, request.DeviceFingerprint, cancellationToken);
+    }
+
+    public async Task<TokenPairResponse> SwitchProfileAsync(
+        Guid userPublicId,
+        SwitchProfileRequest request,
+        string? ipAddress,
+        CancellationToken cancellationToken = default)
+    {
+        var authUser = await _authUsers.GetByUserPublicIdAsync(userPublicId, cancellationToken)
+            ?? throw new InvalidCredentialsException();
+        EnsureNotBlocked(authUser);
+
+        await _userServiceClient.SwitchActiveProfileAsync(userPublicId, request.ProfileId, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            var stored = await _refreshTokens.GetByTokenAsync(request.RefreshToken, cancellationToken);
+            if (stored is not null && !stored.IsRevoked)
+            {
+                stored.IsRevoked = true;
+                await _refreshTokens.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         return await IssueTokenPairAsync(authUser, ipAddress, request.DeviceFingerprint, cancellationToken);
     }
 

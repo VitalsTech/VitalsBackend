@@ -21,6 +21,7 @@ namespace UserService.API.Controllers
         }
 
         [HttpPost("register")]
+        [AllowAnonymous]
         public async Task<ActionResult<UserWithProfilesDto>> Register(CreateUserWithProfileRequest request)
         {
             var result = await _multiProfileUserService.CreateUserWithProfileAsync(request);
@@ -66,6 +67,10 @@ namespace UserService.API.Controllers
             catch (UserNotFoundException ex)
             {
                 return NotFound(new { error = ex.Message });
+            }
+            catch (FluentValidation.ValidationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
             }
             catch (InvalidOperationException ex)
             {

@@ -39,9 +39,9 @@ public sealed class NotificationAppService : INotificationService
     public Task<NotificationDeliveryResponse?> GetDeliveryStatusAsync(Guid deliveryId, CancellationToken cancellationToken = default) =>
         _orchestrator.GetDeliveryStatusAsync(deliveryId, cancellationToken);
 
-    public async Task<IReadOnlyList<NotificationDeliveryResponse>> GetUserHistoryAsync(Guid userId, int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<NotificationDeliveryResponse>> GetUserHistoryAsync(IReadOnlyList<Guid> userIds, int limit, CancellationToken cancellationToken = default)
     {
-        var logs = await _repo.GetUserHistoryAsync(userId, limit, cancellationToken);
+        var logs = await _repo.GetUserHistoryAsync(userIds, limit, cancellationToken);
         return logs.Select(Map).ToList();
     }
 
@@ -175,6 +175,8 @@ public sealed class NotificationAppService : INotificationService
         EventType = log.EventType,
         Channel = log.Channel,
         Status = log.Status,
+        Subject = log.Subject,
+        Body = log.Body,
         AttemptCount = log.AttemptCount,
         CreatedAt = log.CreatedAt,
         DeliveredAt = log.DeliveredAt

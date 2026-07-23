@@ -36,7 +36,7 @@ public sealed class InternalNotificationController : ControllerBase
         Guid userId,
         [FromQuery] int limit = 50,
         CancellationToken cancellationToken = default) =>
-        Ok(await _notifications.GetUserHistoryAsync(userId, limit, cancellationToken));
+        Ok(await _notifications.GetUserHistoryAsync([userId], limit, cancellationToken));
 
     [HttpGet("stats")]
     public async Task<ActionResult<NotificationStatsResponse>> Stats(CancellationToken cancellationToken) =>

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Common;
+using UserService.Application.Exceptions;
 using UserService.Application.Interfaces;
 using UserService.Application.Services;
 using UserService.Domain.Entities;
@@ -94,6 +95,36 @@ namespace UserService.API.Controllers
                 return NotFound("No active profile found");
 
             return Ok(activeProfile);
+        }
+
+        [HttpPost("users/{publicId:guid}/switch-profile")]
+        public async Task<ActionResult<ActiveProfileResponse>> SwitchProfileInternal(
+            Guid publicId,
+            [FromBody] SwitchActiveProfileRequest request)
+        {
+            request.UserPublicId = publicId;
+            try
+            {
+                if (request.ProfileId == Guid.Empty && !string.IsNullOrWhiteSpace(request.ProfileType))
+                {
+                    var profiles = await _multiProfileUserService.GetUserProfilesAsync(publicId);
+                    var match = profiles.FirstOrDefault(p =>
+                        p.ProfileType.Equals(request.ProfileType, StringComparison.OrdinalIgnoreCase));
+                    if (match is null)
+                        return NotFound(new { error = $"Profile type {request.ProfileType} not found for user." });
+                    request.ProfileId = match.ProfileId;
+                }
+
+                return Ok(await _multiProfileUserService.SwitchActiveProfileAsync(request));
+            }
+            catch (UserNotFoundException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
         }
 
         [HttpGet("doctors/find-available")]

@@ -20,6 +20,7 @@ public interface ILlmTriageService
 public interface IMedicalRecordContextClient
 {
     Task<PatientMedicalContextDto?> GetContextAsync(Guid patientId, CancellationToken cancellationToken = default);
+    Task AppendTriageCompletedEventAsync(Guid patientId, Guid sessionId, LlmTriageResultDto result, CancellationToken cancellationToken = default);
 }
 
 public interface ITriageOrchestrator
@@ -27,6 +28,7 @@ public interface ITriageOrchestrator
     Task<TriageSessionResponse> CreateSessionAsync(CreateTriageSessionRequest request, CancellationToken cancellationToken = default);
     Task<TriageSessionResponse> ProcessMessageAsync(Guid sessionId, SendTriageMessageRequest request, CancellationToken cancellationToken = default);
     Task<TriageSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task<TriageSessionResponse> CompleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }
 
 public interface ITriageEventPublisher

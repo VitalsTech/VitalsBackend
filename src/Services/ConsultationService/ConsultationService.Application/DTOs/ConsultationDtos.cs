@@ -61,6 +61,8 @@ public sealed class SendMessageRequest
 public sealed class ConsultationMessageDto
 {
     public Guid MessageId { get; set; }
+    /// <summary>Alias for frontend clients that expect <c>id</c>.</summary>
+    public Guid Id => MessageId;
     public long SequenceNumber { get; set; }
     public Guid SenderId { get; set; }
     public string SenderRole { get; set; } = string.Empty;

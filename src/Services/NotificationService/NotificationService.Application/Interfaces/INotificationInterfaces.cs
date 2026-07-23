@@ -13,7 +13,7 @@ public interface INotificationRepository
     Task SaveTemplateAsync(NotificationTemplate template, CancellationToken cancellationToken = default);
     Task SaveDeliveryLogAsync(NotificationDeliveryLog log, CancellationToken cancellationToken = default);
     Task<NotificationDeliveryLog?> GetDeliveryByIdAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<NotificationDeliveryLog>> GetUserHistoryAsync(Guid userId, int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<NotificationDeliveryLog>> GetUserHistoryAsync(IReadOnlyList<Guid> userIds, int limit, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<NotificationDeliveryLog>> GetPendingRetriesAsync(DateTime utcNow, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DevicePushToken>> GetActivePushTokensAsync(Guid userId, CancellationToken cancellationToken = default);
     Task SavePushTokenAsync(DevicePushToken token, CancellationToken cancellationToken = default);
@@ -58,7 +58,7 @@ public interface INotificationService
     Task<ProcessEventResponse> ProcessEventAsync(NotificationEventDto notificationEvent, CancellationToken cancellationToken = default);
     Task<ProcessEventResponse> SendManualAsync(SendManualNotificationRequest request, CancellationToken cancellationToken = default);
     Task<NotificationDeliveryResponse?> GetDeliveryStatusAsync(Guid deliveryId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<NotificationDeliveryResponse>> GetUserHistoryAsync(Guid userId, int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<NotificationDeliveryResponse>> GetUserHistoryAsync(IReadOnlyList<Guid> userIds, int limit, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<NotificationTemplateDto>> GetTemplatesAsync(CancellationToken cancellationToken = default);
     Task<NotificationTemplateDto> UpdateTemplateAsync(string templateKey, string channel, UpdateTemplateRequest request, CancellationToken cancellationToken = default);
     Task RegisterPushTokenAsync(Guid userId, RegisterPushTokenRequest request, CancellationToken cancellationToken = default);

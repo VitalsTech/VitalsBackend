@@ -28,6 +28,15 @@ public sealed class LoginRequest
     public string PhoneNumber { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string? DeviceFingerprint { get; set; }
+    /// <summary>Optional: Patient | Doctor | Organization. Activates matching profile before issuing JWT.</summary>
+    public string? PreferredProfileType { get; set; }
+}
+
+public sealed class SwitchProfileRequest
+{
+    public Guid ProfileId { get; set; }
+    public string? DeviceFingerprint { get; set; }
+    public string? RefreshToken { get; set; }
 }
 
 public sealed class RefreshTokenRequest

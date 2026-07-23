@@ -49,6 +49,44 @@ public sealed class MedicalRecordContextClient : IMedicalRecordContextClient
         };
     }
 
+    public async Task AppendTriageCompletedEventAsync(
+        Guid patientId,
+        Guid sessionId,
+        LlmTriageResultDto result,
+        CancellationToken cancellationToken = default)
+    {
+        var payload = new
+        {
+            sessionId,
+            urgencyLevel = result.UrgencyLevel,
+            recommendedSpecialization = "Терапевт",
+            recommendation = result.RecommendedAction,
+            route = new[]
+            {
+                "ИИ-триаж завершён",
+                "Запись к терапевту",
+                "Консультация и назначение лечения"
+            }
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"internal/medical-records/patients/{patientId}/events")
+        {
+            Content = JsonContent.Create(new
+            {
+                eventId = Guid.NewGuid(),
+                eventType = "AiTriageUrgencyDetermined",
+                sourceService = "ai-triage",
+                payload
+            })
+        };
+        request.Headers.TryAddWithoutValidation("X-Service-Name", "ai-triage");
+        request.Headers.TryAddWithoutValidation("X-User-Id", Guid.Empty.ToString());
+
+        var response = await _http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning("Failed to append triage event for {PatientId}: {Status}", patientId, response.StatusCode);
+    }
+
     private sealed class MedicalRecordStateResponse
     {
         public List<DiagnosisItem> ActiveDiagnoses { get; set; } = new();

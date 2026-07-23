@@ -46,12 +46,18 @@ public sealed class AccessControlService : IAccessControlService
         if (requiredScope == AccessScopes.ManageConsents && IsPatientSelf(patientId, actor))
             return;
 
-        var grants = await _grants.GetActiveGrantsAsync(patientId, actor.UserId, cancellationToken);
-        foreach (var grant in grants)
+        var granteeIds = new List<Guid> { actor.UserId };
+        granteeIds.AddRange(actor.ProfileIds.Where(id => id != Guid.Empty && id != actor.UserId));
+
+        foreach (var granteeId in granteeIds)
         {
-            var scopes = JsonSerializer.Deserialize<List<string>>(grant.ScopesJson) ?? new List<string>();
-            if (scopes.Contains(requiredScope, StringComparer.OrdinalIgnoreCase))
-                return;
+            var grants = await _grants.GetActiveGrantsAsync(patientId, granteeId, cancellationToken);
+            foreach (var grant in grants)
+            {
+                var scopes = JsonSerializer.Deserialize<List<string>>(grant.ScopesJson) ?? new List<string>();
+                if (scopes.Contains(requiredScope, StringComparer.OrdinalIgnoreCase))
+                    return;
+            }
         }
 
         throw new AccessDeniedException();

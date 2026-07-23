@@ -35,6 +35,7 @@ namespace UserService.Application.DTOs.Common
     {
         public Guid UserPublicId { get; set; }
         public Guid ProfileId { get; set; }
+        public string? ProfileType { get; set; }
     }
 
     public class ActiveProfileResponse

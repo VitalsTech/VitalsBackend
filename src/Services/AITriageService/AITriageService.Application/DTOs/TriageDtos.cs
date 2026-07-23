@@ -15,6 +15,13 @@ public sealed class TriageSessionResponse
     public DateTime CreatedAt { get; set; }
     public IReadOnlyList<TriageMessageDto> Messages { get; set; } = Array.Empty<TriageMessageDto>();
     public TriageAssessmentDto? LatestAssessment { get; set; }
+    /// <summary>Frontend alias: emergency | urgent | routine.</summary>
+    public string? Urgency { get; set; }
+    /// <summary>Frontend alias for RecommendedAction.</summary>
+    public string? Recommendation { get; set; }
+    public string? RecommendationText { get; set; }
+    public string? RecommendedSpecialization { get; set; }
+    public bool CanBeRemote { get; set; } = true;
 }
 
 public sealed class SendTriageMessageRequest

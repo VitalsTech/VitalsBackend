@@ -33,6 +33,15 @@ public sealed class TriageController : ControllerBase
         [FromBody] SendTriageMessageRequest request,
         CancellationToken cancellationToken) =>
         Ok(await _triage.ProcessMessageAsync(sessionId, request, cancellationToken));
+
+    /// <summary>
+    /// Завершить триаж и записать маршрут в медкарту (mock при отсутствии оценки LLM).
+    /// </summary>
+    [HttpPost("{sessionId:guid}/complete")]
+    public async Task<ActionResult<TriageSessionResponse>> CompleteSession(
+        Guid sessionId,
+        CancellationToken cancellationToken) =>
+        Ok(await _triage.CompleteSessionAsync(sessionId, cancellationToken));
 }
 
 [ApiController]
