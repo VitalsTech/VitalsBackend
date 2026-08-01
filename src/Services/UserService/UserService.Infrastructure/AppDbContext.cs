@@ -122,6 +122,9 @@ namespace UserService.Infrastructure.Data
                 .HasIndex(s => new { s.DoctorProfileId, s.StartsAt });
 
             modelBuilder.Entity<DoctorScheduleSlot>()
+                .HasIndex(s => s.ConsultationSessionId);
+
+            modelBuilder.Entity<DoctorScheduleSlot>()
                 .HasOne(s => s.DoctorProfile)
                 .WithMany()
                 .HasForeignKey(s => s.DoctorProfileId)

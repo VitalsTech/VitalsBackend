@@ -176,6 +176,21 @@ public sealed class PrescriptionAppService : IPrescriptionService
         await TransitionAsync(prescription, PrescriptionStatus.Signed, "doctor", doctorId, null, cancellationToken);
 
         await _medicalEvents.AppendEventAsync(prescription.PatientId, "PrescriptionSigned", MapResponse(prescription, validation), prescription.Id, cancellationToken);
+        await _medicalEvents.AppendEventAsync(prescription.PatientId, "PrescriptionIssued", new
+        {
+            prescriptionId = prescription.Id,
+            doctorId = prescription.DoctorId,
+            medications = prescription.Medications.Select(m => m.TradeName).ToList(),
+            documentType = "prescription",
+            instructionsUrl = $"/api/v1/prescriptions/{prescription.Id}/instructions"
+        }, prescription.Id, cancellationToken);
+        await _medicalEvents.AppendEventAsync(prescription.PatientId, "DocumentUploaded", new
+        {
+            prescriptionId = prescription.Id,
+            title = "Рецепт",
+            documentType = "prescription",
+            source = "prescription-service"
+        }, prescription.Id, cancellationToken);
         await _publisher.PublishAsync(_kafka.PrescriptionCreatedTopic, new { prescription.Id, prescription.PatientId, prescription.DoctorId }, cancellationToken);
         await PublishStatusAsync(prescription, cancellationToken);
 

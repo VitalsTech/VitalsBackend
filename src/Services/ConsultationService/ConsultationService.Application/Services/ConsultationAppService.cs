@@ -66,6 +66,8 @@ public sealed class ConsultationAppService : IConsultationService
             decision.EffectiveUrgencyLevel,
             decision.RoutingDecisionId ?? decision.SessionId,
             decision.SessionId,
+            scheduledAt: null,
+            scheduledSlotId: null,
             cancellationToken);
     }
 
@@ -80,6 +82,8 @@ public sealed class ConsultationAppService : IConsultationService
             request.UrgencyLevel,
             request.RoutingDecisionId,
             request.TriageSessionId,
+            request.ScheduledAt,
+            request.ScheduledSlotId,
             cancellationToken);
 
     public async Task<ConsultationSessionResponse?> FindActiveAsync(
@@ -91,10 +95,32 @@ public sealed class ConsultationAppService : IConsultationService
         return session is null ? null : MapSession(session);
     }
 
+    public async Task<IReadOnlyList<ConsultationSessionResponse>> ListMineAsync(
+        IReadOnlyList<Guid> identityIds,
+        bool asPatient,
+        bool asDoctor,
+        bool includeCompleted,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var sessions = await _sessions.ListForParticipantAsync(
+            identityIds,
+            asPatient,
+            asDoctor,
+            includeCompleted,
+            limit,
+            cancellationToken);
+        return sessions.Select(MapSession).ToList();
+    }
+
     public async Task<ConsultationSessionResponse> OpenOrCreateAsync(
         CreateConsultationRequest request,
         CancellationToken cancellationToken = default)
     {
+        // Запись на слот — это отдельный приём на конкретное время, переиспользовать чужую бронь нельзя.
+        if (request.ScheduledSlotId.HasValue)
+            return await CreateManualAsync(request, cancellationToken);
+
         var existing = await _sessions.FindActiveBetweenAsync(
             request.PatientId,
             request.DoctorId,
@@ -469,10 +495,58 @@ public sealed class ConsultationAppService : IConsultationService
     public async Task<IReadOnlyList<ConsultationMessageDto>> GetMessagesAsync(
         Guid sessionId,
         long afterSequence,
+        Guid readerId,
+        ParticipantRole readerRole,
+        bool markAsRead,
+        IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
+
+        EnsureParticipant(session, NormalizeIds(readerId, identityIds), readerRole);
+
+        if (markAsRead)
+            await MarkMessagesReadCoreAsync(session, readerRole, cancellationToken);
+
         var messages = await _messages.GetMessagesAfterSequenceAsync(sessionId, afterSequence, cancellationToken);
         return messages.Select(MapMessage).ToList();
+    }
+
+    public async Task<ConsultationSessionResponse> MarkMessagesReadAsync(
+        Guid sessionId,
+        Guid readerId,
+        ParticipantRole readerRole,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
+
+        EnsureParticipant(session, NormalizeIds(readerId, identityIds), readerRole);
+        await MarkMessagesReadCoreAsync(session, readerRole, cancellationToken);
+
+        var updated = await _sessions.GetByIdAsync(sessionId, cancellationToken) ?? session;
+        await SyncStateStoreAsync(updated, cancellationToken);
+        return MapSession(updated);
+    }
+
+    private async Task MarkMessagesReadCoreAsync(
+        ConsultationSession session,
+        ParticipantRole readerRole,
+        CancellationToken cancellationToken)
+    {
+        var messages = await _messages.GetMessagesAfterSequenceAsync(session.Id, 0, cancellationToken);
+        var lastSequence = messages.Count == 0 ? 0L : messages[^1].SequenceNumber;
+
+        await _messages.MarkReadAsync(session.Id, readerRole, cancellationToken);
+
+        await _notifier.NotifyMessagesReadAsync(
+            session.Id,
+            readerRole,
+            DateTime.UtcNow,
+            lastSequence,
+            cancellationToken);
     }
 
     public async Task<VideoRoomResponse> StartVideoAsync(
@@ -603,6 +677,8 @@ public sealed class ConsultationAppService : IConsultationService
         int urgencyLevel,
         Guid? routingDecisionId,
         Guid? triageSessionId,
+        DateTime? scheduledAt,
+        Guid? scheduledSlotId,
         CancellationToken cancellationToken)
     {
         var session = new ConsultationSession
@@ -617,6 +693,8 @@ public sealed class ConsultationAppService : IConsultationService
             ExpectedDurationMinutes = SessionLifecycle.DefaultDurationMinutes(type, _options),
             RoutingDecisionId = routingDecisionId,
             TriageSessionId = triageSessionId,
+            ScheduledAt = scheduledAt is null ? null : ToUtc(scheduledAt.Value),
+            ScheduledSlotId = scheduledSlotId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow
         };
@@ -771,12 +849,24 @@ public sealed class ConsultationAppService : IConsultationService
         UrgencyLevel = session.UrgencyLevel,
         ExpectedDurationMinutes = session.ExpectedDurationMinutes,
         PatientConsentGiven = session.PatientConsentGiven,
+        ScheduledAt = session.ScheduledAt,
+        ScheduledSlotId = session.ScheduledSlotId,
+        IsScheduled = session.ScheduledSlotId.HasValue || session.ScheduledAt.HasValue,
         CreatedAt = session.CreatedAt,
         StartedAt = session.StartedAt,
         CompletedAt = session.CompletedAt,
+        LastActivityAt = session.LastActivityAt,
         PatientUnreadCount = session.PatientUnreadCount,
         DoctorUnreadCount = session.DoctorUnreadCount,
         VideoRoomId = session.VideoRoomId
+    };
+
+    /// <summary>Столбцы времени — timestamptz, Npgsql отклоняет Unspecified из тела запроса.</summary>
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
     };
 
     private static ConsultationMessageDto MapMessage(ConsultationMessage message) => new()

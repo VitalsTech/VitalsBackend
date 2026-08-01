@@ -47,4 +47,8 @@ public static class UserClaims
         user.IsInRole(role) ||
         user.FindAll("role").Any(c => c.Value.Equals(role, StringComparison.OrdinalIgnoreCase)) ||
         user.FindAll(ClaimTypes.Role).Any(c => c.Value.Equals(role, StringComparison.OrdinalIgnoreCase));
+
+    public static bool IsDoctor(ClaimsPrincipal user) => IsInAppRole(user, "Doctor");
+
+    public static bool IsPatient(ClaimsPrincipal user) => IsInAppRole(user, "Patient");
 }

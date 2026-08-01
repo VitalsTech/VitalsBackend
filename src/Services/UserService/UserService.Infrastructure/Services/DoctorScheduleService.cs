@@ -87,7 +87,8 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
 
         await EnsureScheduleSlotsAsync(doctorProfile.Id, cancellationToken);
 
-        var start = (from ?? DateTime.UtcNow).Date;
+        var start = ToUtc(from ?? DateTime.UtcNow).Date;
+        start = DateTime.SpecifyKind(start, DateTimeKind.Utc);
         var end = start.AddDays(Math.Clamp(days, 1, 30));
 
         var slots = await _db.DoctorScheduleSlots
@@ -96,9 +97,11 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
             .OrderBy(s => s.StartsAt)
             .Select(s => new DoctorScheduleSlotDto
             {
+                Id = s.Id,
                 StartsAt = s.StartsAt,
                 EndsAt = s.EndsAt,
-                IsAvailable = s.IsAvailable
+                IsAvailable = s.IsAvailable,
+                IsOnline = s.IsOnline
             })
             .ToListAsync(cancellationToken);
 
@@ -107,6 +110,220 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
             DoctorId = doctorProfile.Profile.User.PublicId,
             Slots = slots
         };
+    }
+
+    public async Task<DoctorScheduleBookingResponseDto> GetScheduleWithBookingsAsync(
+        Guid doctorPublicId,
+        DateTime? from,
+        int days,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorProfile = await FindDoctorProfileAsync(doctorPublicId, cancellationToken)
+            ?? throw new UserNotFoundException($"Doctor {doctorPublicId} not found.");
+
+        await EnsureScheduleSlotsAsync(doctorProfile.Id, cancellationToken);
+
+        var start = DateTime.SpecifyKind(ToUtc(from ?? DateTime.UtcNow).Date, DateTimeKind.Utc);
+        var end = start.AddDays(Math.Clamp(days, 1, 30));
+
+        var slots = await _db.DoctorScheduleSlots
+            .AsNoTracking()
+            .Where(s => s.DoctorProfileId == doctorProfile.Id && s.StartsAt >= start && s.StartsAt < end)
+            .OrderBy(s => s.StartsAt)
+            .Select(s => new DoctorScheduleSlotBookingDto
+            {
+                Id = s.Id,
+                StartsAt = s.StartsAt,
+                EndsAt = s.EndsAt,
+                IsAvailable = s.IsAvailable,
+                IsOnline = s.IsOnline,
+                PatientId = s.PatientId,
+                ConsultationSessionId = s.ConsultationSessionId,
+                BookedAt = s.BookedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        return new DoctorScheduleBookingResponseDto
+        {
+            DoctorId = doctorProfile.Profile.User.PublicId,
+            Slots = slots
+        };
+    }
+
+    public async Task<DoctorScheduleSlotBookingDto?> ReserveScheduleSlotAsync(
+        Guid doctorPublicId,
+        Guid slotId,
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorProfile = await FindDoctorProfileAsync(doctorPublicId, cancellationToken)
+            ?? throw new UserNotFoundException($"Doctor {doctorPublicId} not found.");
+
+        var now = DateTime.UtcNow;
+
+        // Оборванная бронь (есть PatientId, нет сессии) старше 2 минут — освобождаем.
+        // Иначе после сбоя шлюза слот навсегда «занят» без консультации.
+        await _db.DoctorScheduleSlots
+            .Where(s => s.Id == slotId
+                && s.DoctorProfileId == doctorProfile.Id
+                && s.PatientId != null
+                && s.ConsultationSessionId == null
+                && s.BookedAt != null
+                && s.BookedAt < now.AddMinutes(-2))
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(s => s.IsAvailable, true)
+                    .SetProperty(s => s.PatientId, (Guid?)null)
+                    .SetProperty(s => s.BookedAt, (DateTime?)null),
+                cancellationToken);
+
+        var affected = await _db.DoctorScheduleSlots
+            .Where(s => s.Id == slotId
+                && s.DoctorProfileId == doctorProfile.Id
+                && s.IsAvailable
+                && s.PatientId == null
+                && s.StartsAt > now)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(s => s.IsAvailable, false)
+                    .SetProperty(s => s.PatientId, patientId)
+                    .SetProperty(s => s.BookedAt, now),
+                cancellationToken);
+
+        var slot = await _db.DoctorScheduleSlots
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == slotId && s.DoctorProfileId == doctorProfile.Id, cancellationToken);
+
+        if (slot is null)
+            return null;
+
+        // Повтор того же пациента без сессии — продолжаем запись (идемпотентность).
+        if (affected == 0
+            && slot.PatientId == patientId
+            && slot.ConsultationSessionId is null)
+        {
+            return MapBooking(slot);
+        }
+
+        if (affected == 0)
+            return null;
+
+        return MapBooking(slot);
+    }
+
+    public async Task<bool> ReleaseScheduleSlotAsync(
+        Guid slotId,
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var affected = await _db.DoctorScheduleSlots
+            .Where(s => s.Id == slotId && s.PatientId == patientId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(s => s.IsAvailable, true)
+                    .SetProperty(s => s.PatientId, (Guid?)null)
+                    .SetProperty(s => s.ConsultationSessionId, (Guid?)null)
+                    .SetProperty(s => s.BookedAt, (DateTime?)null),
+                cancellationToken);
+
+        return affected > 0;
+    }
+
+    public async Task<bool> LinkScheduleSlotSessionAsync(
+        Guid slotId,
+        Guid patientId,
+        Guid consultationSessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var affected = await _db.DoctorScheduleSlots
+            .Where(s => s.Id == slotId && s.PatientId == patientId)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(s => s.ConsultationSessionId, consultationSessionId),
+                cancellationToken);
+
+        return affected > 0;
+    }
+
+    public async Task<DoctorScheduleSlotDto> UpsertScheduleSlotAsync(
+        Guid doctorPublicId,
+        UpsertDoctorScheduleSlotRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorProfile = await _db.DoctorProfiles
+            .Include(d => d.Profile)
+            .ThenInclude(p => p.User)
+            .FirstOrDefaultAsync(d =>
+                d.Profile.ProfileType == ProfileType.Doctor &&
+                (d.Profile.User.PublicId == doctorPublicId || d.Id == doctorPublicId || d.Profile.Id == doctorPublicId),
+                cancellationToken)
+            ?? throw new UserNotFoundException($"Doctor {doctorPublicId} not found.");
+
+        var startsAt = ToUtc(request.StartsAt);
+        var endsAt = ToUtc(request.EndsAt);
+
+        if (endsAt <= startsAt)
+            throw new InvalidOperationException("Время окончания должно быть позже начала.");
+
+        if (startsAt < DateTime.UtcNow.AddMinutes(-5))
+            throw new InvalidOperationException("Нельзя создавать слот в прошлом.");
+
+        DoctorScheduleSlot slot;
+        if (request.Id.HasValue)
+        {
+            slot = await _db.DoctorScheduleSlots
+                .FirstOrDefaultAsync(s => s.Id == request.Id.Value && s.DoctorProfileId == doctorProfile.Id, cancellationToken)
+                ?? throw new KeyNotFoundException("Слот расписания не найден.");
+
+            if (slot.PatientId is not null)
+                throw new InvalidOperationException("Слот забронирован пациентом, изменить его нельзя.");
+
+            slot.StartsAt = startsAt;
+            slot.EndsAt = endsAt;
+            slot.IsAvailable = request.IsAvailable;
+            slot.IsOnline = request.IsOnline;
+        }
+        else
+        {
+            slot = new DoctorScheduleSlot
+            {
+                DoctorProfileId = doctorProfile.Id,
+                StartsAt = startsAt,
+                EndsAt = endsAt,
+                IsAvailable = request.IsAvailable,
+                IsOnline = request.IsOnline
+            };
+            _db.DoctorScheduleSlots.Add(slot);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new DoctorScheduleSlotDto
+        {
+            Id = slot.Id,
+            StartsAt = slot.StartsAt,
+            EndsAt = slot.EndsAt,
+            IsAvailable = slot.IsAvailable,
+            IsOnline = slot.IsOnline
+        };
+    }
+
+    public async Task DeleteScheduleSlotAsync(
+        Guid doctorPublicId,
+        Guid slotId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorProfile = await FindDoctorProfileAsync(doctorPublicId, cancellationToken)
+            ?? throw new UserNotFoundException($"Doctor {doctorPublicId} not found.");
+
+        var slot = await _db.DoctorScheduleSlots
+            .FirstOrDefaultAsync(s => s.Id == slotId && s.DoctorProfileId == doctorProfile.Id, cancellationToken)
+            ?? throw new KeyNotFoundException("Слот расписания не найден.");
+
+        if (slot.PatientId is not null)
+            throw new InvalidOperationException("Слот забронирован пациентом, удалить его нельзя.");
+
+        _db.DoctorScheduleSlots.Remove(slot);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<AvailableDoctorDto?> FindAvailableDoctorAsync(
@@ -191,6 +408,26 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
         _db.DoctorScheduleSlots.AddRange(slots);
         await _db.SaveChangesAsync(cancellationToken);
     }
+
+    private static DoctorScheduleSlotBookingDto MapBooking(DoctorScheduleSlot slot) => new()
+    {
+        Id = slot.Id,
+        StartsAt = slot.StartsAt,
+        EndsAt = slot.EndsAt,
+        IsAvailable = slot.IsAvailable,
+        IsOnline = slot.IsOnline,
+        PatientId = slot.PatientId,
+        ConsultationSessionId = slot.ConsultationSessionId,
+        BookedAt = slot.BookedAt
+    };
+
+    /// <summary>Столбцы слотов — timestamptz, Npgsql отклоняет Unspecified из query/body.</summary>
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
 
     private async Task<DoctorProfile?> FindDoctorProfileAsync(Guid doctorId, CancellationToken cancellationToken) =>
         await _db.DoctorProfiles

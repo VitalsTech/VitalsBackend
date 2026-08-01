@@ -15,6 +15,29 @@ public interface IConsultationRepository
         IReadOnlyList<Guid>? alternatePatientIds = null,
         CancellationToken cancellationToken = default);
     Task<ConsultationSession?> FindLatestByPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Doctor calendar source: sessions anchored (ScheduledAt ?? StartedAt ?? CreatedAt) inside the window,
+    /// plus open sessions with activity since <paramref name="openSince"/> regardless of date.
+    /// </summary>
+    Task<IReadOnlyList<ConsultationSession>> GetByDoctorInRangeAsync(
+        IReadOnlyList<Guid> doctorIds,
+        DateTime from,
+        DateTime to,
+        DateTime? openSince = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sessions where the user is patient or doctor (by any of their identity ids).
+    /// </summary>
+    Task<IReadOnlyList<ConsultationSession>> ListForParticipantAsync(
+        IReadOnlyList<Guid> identityIds,
+        bool asPatient,
+        bool asDoctor,
+        bool includeCompleted,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     Task SaveSessionAsync(ConsultationSession session, CancellationToken cancellationToken = default);
     Task AddTransitionAsync(SessionStatusTransition transition, CancellationToken cancellationToken = default);
     Task<bool> AddParticipantAsync(SessionParticipant participant, CancellationToken cancellationToken = default);
@@ -61,6 +84,7 @@ public interface IConsultationChatNotifier
 {
     Task NotifyMessageAsync(Guid sessionId, ConsultationMessageDto message, CancellationToken cancellationToken = default);
     Task NotifyStatusChangedAsync(Guid sessionId, string status, CancellationToken cancellationToken = default);
+    Task NotifyMessagesReadAsync(Guid sessionId, ParticipantRole readerRole, DateTime readAt, long lastSequence, CancellationToken cancellationToken = default);
 }
 
 public interface IConsultationService
@@ -70,6 +94,15 @@ public interface IConsultationService
     Task<ConsultationSessionResponse> OpenOrCreateAsync(CreateConsultationRequest request, CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse?> FindActiveAsync(Guid patientId, Guid doctorId, CancellationToken cancellationToken = default);
+
+    /// <summary>Список консультаций текущего пользователя (пациент и/или врач).</summary>
+    Task<IReadOnlyList<ConsultationSessionResponse>> ListMineAsync(
+        IReadOnlyList<Guid> identityIds,
+        bool asPatient,
+        bool asDoctor,
+        bool includeCompleted,
+        int limit,
+        CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse> JoinAsync(Guid sessionId, Guid userId, ParticipantRole role, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse> PauseAsync(Guid sessionId, Guid doctorId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse> ResumeAsync(Guid sessionId, Guid doctorId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
@@ -79,7 +112,20 @@ public interface IConsultationService
     Task<ConsultationSessionResponse> CancelAsync(Guid sessionId, Guid userId, string reason, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse> RecordConsentAsync(Guid sessionId, Guid patientId, ConsentRequest request, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
     Task<ConsultationMessageDto> SendMessageAsync(Guid sessionId, Guid senderId, ParticipantRole role, SendMessageRequest request, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<ConsultationMessageDto>> GetMessagesAsync(Guid sessionId, long afterSequence, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ConsultationMessageDto>> GetMessagesAsync(
+        Guid sessionId,
+        long afterSequence,
+        Guid readerId,
+        ParticipantRole readerRole,
+        bool markAsRead,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default);
+    Task<ConsultationSessionResponse> MarkMessagesReadAsync(
+        Guid sessionId,
+        Guid readerId,
+        ParticipantRole readerRole,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default);
     Task<VideoRoomResponse> StartVideoAsync(Guid sessionId, Guid userId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
     Task TriggerEmergencyAsync(Guid sessionId, Guid doctorId, CancellationToken cancellationToken = default);
     Task SubmitRatingAsync(Guid sessionId, Guid userId, SubmitRatingRequest request, CancellationToken cancellationToken = default);

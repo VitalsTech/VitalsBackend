@@ -123,4 +123,11 @@ public sealed class InternalTriageController : ControllerBase
     [HttpGet("sessions/{sessionId:guid}")]
     public async Task<ActionResult<TriageSessionResponse>> GetSession(Guid sessionId, CancellationToken cancellationToken) =>
         Ok(await _triage.GetSessionAsync(sessionId, cancellationToken));
+
+    [HttpGet("patients/{patientId:guid}/sessions")]
+    public async Task<ActionResult<IReadOnlyList<TriageSessionResponse>>> GetPatientSessions(
+        Guid patientId,
+        [FromQuery] int limit = 1,
+        CancellationToken cancellationToken = default) =>
+        Ok(await _triage.GetSessionsByPatientAsync(patientId, limit, cancellationToken));
 }

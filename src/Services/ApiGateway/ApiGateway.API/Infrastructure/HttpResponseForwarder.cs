@@ -9,13 +9,30 @@ public static class HttpResponseForwarder
         foreach (var header in response.Headers)
             context.Response.Headers[header.Key] = header.Value.ToArray();
 
-        if (response.Content is not null)
-        {
-            foreach (var header in response.Content.Headers)
-                context.Response.Headers[header.Key] = header.Value.ToArray();
+        if (response.Content is null)
+            return;
 
-            context.Response.Headers.Remove("transfer-encoding");
-            await response.Content.CopyToAsync(context.Response.Body, cancellationToken);
+        foreach (var header in response.Content.Headers)
+            context.Response.Headers[header.Key] = header.Value.ToArray();
+
+        context.Response.Headers.Remove("transfer-encoding");
+
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        if (bytes.Length == 0)
+            return;
+
+        if ((int)response.StatusCode is >= 400 and <= 599)
+        {
+            var original = System.Text.Encoding.UTF8.GetString(bytes);
+            var localized = ErrorMessageLocalizer.TryLocalizeJson(original);
+            if (localized is not null)
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsync(localized, cancellationToken);
+                return;
+            }
         }
+
+        await context.Response.Body.WriteAsync(bytes, cancellationToken);
     }
 }

@@ -29,6 +29,7 @@ public sealed class ConsultationDbContext : DbContext
             entity.HasIndex(x => x.DoctorId);
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => x.ScheduledSlotId);
         });
 
         modelBuilder.Entity<ConsultationMessage>(entity =>

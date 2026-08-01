@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddHttpClient("jwks");
         services.AddHttpClient<IAuthBackendClient, AuthBackendClient>();
         services.AddSingleton<IBackendForwarder, BackendForwarder>();
+        services.AddScoped<IDoctorCalendarService, DoctorCalendarService>();
 
         BackendHttpClientRegistration.AddBackendClient(services, "auth-service", servicesOptions.AuthService);
         BackendHttpClientRegistration.AddBackendClient(services, "user-service", servicesOptions.UserService);
@@ -42,6 +43,7 @@ public static class DependencyInjection
         BackendHttpClientRegistration.AddBackendClient(services, "payment-service", servicesOptions.PaymentService);
         BackendHttpClientRegistration.AddBackendClient(services, "analytics-service", servicesOptions.AnalyticsService);
         BackendHttpClientRegistration.AddBackendClient(services, "quality-service", servicesOptions.QualityService);
+        BackendHttpClientRegistration.AddBackendClient(services, "routing-service", servicesOptions.RoutingService);
 
         return services;
     }

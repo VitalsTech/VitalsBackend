@@ -22,6 +22,38 @@ public sealed class ConsultationsController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _consultations.OpenOrCreateAsync(request, cancellationToken));
 
+    /// <summary>
+    /// Список консультаций текущего пользователя.
+    /// Пациент видит свои записи (в т.ч. запланированные через book), врач — свои приёмы.
+    /// </summary>
+    [HttpGet("mine")]
+    public async Task<ActionResult<MyConsultationsResponse>> ListMine(
+        [FromQuery] bool includeCompleted = false,
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        var asPatient = UserClaims.IsPatient(User);
+        var asDoctor = UserClaims.IsDoctor(User);
+
+        // Если роль в токене не размечена — отдаём всё, где пользователь фигурирует.
+        if (!asPatient && !asDoctor)
+        {
+            asPatient = true;
+            asDoctor = true;
+        }
+
+        var items = await _consultations.ListMineAsync(
+            ids,
+            asPatient,
+            asDoctor,
+            includeCompleted,
+            limit,
+            cancellationToken);
+
+        return Ok(new MyConsultationsResponse { Items = items });
+    }
+
     [HttpGet("active")]
     public async Task<ActionResult<ConsultationSessionResponse>> GetActive(
         [FromQuery] Guid patientId,
@@ -78,8 +110,23 @@ public sealed class ConsultationsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<ConsultationMessageDto>>> GetMessages(
         Guid sessionId,
         [FromQuery] long afterSequence = 0,
-        CancellationToken cancellationToken = default) =>
-        Ok(await _consultations.GetMessagesAsync(sessionId, afterSequence, cancellationToken));
+        [FromQuery] bool markAsRead = true,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        var role = UserClaims.GetParticipantRole(User);
+        return Ok(await _consultations.GetMessagesAsync(sessionId, afterSequence, ids[0], role, markAsRead, ids, cancellationToken));
+    }
+
+    [HttpPost("{sessionId:guid}/messages/read")]
+    public async Task<ActionResult<ConsultationSessionResponse>> MarkMessagesRead(
+        Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        var role = UserClaims.GetParticipantRole(User);
+        return Ok(await _consultations.MarkMessagesReadAsync(sessionId, ids[0], role, ids, cancellationToken));
+    }
 
     [HttpPost("{sessionId:guid}/messages")]
     public async Task<ActionResult<ConsultationMessageDto>> SendMessage(

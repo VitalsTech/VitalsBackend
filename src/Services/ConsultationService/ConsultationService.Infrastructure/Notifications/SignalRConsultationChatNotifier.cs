@@ -1,5 +1,6 @@
 using ConsultationService.Application.DTOs;
 using ConsultationService.Application.Interfaces;
+using ConsultationService.Domain.Enums;
 using ConsultationService.Infrastructure.Hubs;
 using Microsoft.AspNetCore.SignalR;
 
@@ -16,4 +17,15 @@ public sealed class SignalRConsultationChatNotifier : IConsultationChatNotifier
 
     public Task NotifyStatusChangedAsync(Guid sessionId, string status, CancellationToken cancellationToken = default) =>
         _hub.Clients.Group(sessionId.ToString()).SendAsync("statusChanged", new { sessionId, status }, cancellationToken);
+
+    public Task NotifyMessagesReadAsync(
+        Guid sessionId,
+        ParticipantRole readerRole,
+        DateTime readAt,
+        long lastSequence,
+        CancellationToken cancellationToken = default) =>
+        _hub.Clients.Group(sessionId.ToString()).SendAsync(
+            "messagesRead",
+            new { sessionId, readerRole = readerRole.ToString(), readAt, lastSequence },
+            cancellationToken);
 }

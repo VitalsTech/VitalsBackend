@@ -24,6 +24,11 @@ public sealed class CreateConsultationRequest
     public int UrgencyLevel { get; set; } = 3;
     public Guid? RoutingDecisionId { get; set; }
     public Guid? TriageSessionId { get; set; }
+
+    /// <summary>Время приёма из брони слота. Задано — сессия всегда создаётся новая.</summary>
+    public DateTime? ScheduledAt { get; set; }
+
+    public Guid? ScheduledSlotId { get; set; }
 }
 
 public sealed class ConsultationSessionResponse
@@ -37,10 +42,50 @@ public sealed class ConsultationSessionResponse
     public int UrgencyLevel { get; set; }
     public int ExpectedDurationMinutes { get; set; }
     public bool PatientConsentGiven { get; set; }
+    public DateTime? ScheduledAt { get; set; }
+    public Guid? ScheduledSlotId { get; set; }
+
+    /// <summary>true — запись на слот расписания; false — свободный чат / консультация без брони.</summary>
+    public bool IsScheduled { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    public DateTime LastActivityAt { get; set; }
     public int PatientUnreadCount { get; set; }
+    public int DoctorUnreadCount { get; set; }
+    public string? VideoRoomId { get; set; }
+}
+
+public sealed class MyConsultationsResponse
+{
+    public IReadOnlyList<ConsultationSessionResponse> Items { get; set; } = Array.Empty<ConsultationSessionResponse>();
+}
+
+/// <summary>
+/// Compact session projection consumed by the gateway when building the doctor calendar.
+/// </summary>
+public sealed class DoctorCalendarSessionDto
+{
+    public Guid SessionId { get; set; }
+    public Guid PatientId { get; set; }
+    public Guid DoctorId { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsOpen { get; set; }
+    public int UrgencyLevel { get; set; }
+    public int ExpectedDurationMinutes { get; set; }
+    public Guid? TriageSessionId { get; set; }
+    public Guid? RoutingDecisionId { get; set; }
+    public Guid? ScheduledSlotId { get; set; }
+
+    /// <summary>Якорь для календаря: время брони, иначе фактический старт, иначе создание.</summary>
+    public DateTime ScheduledAt { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public DateTime LastActivityAt { get; set; }
     public int DoctorUnreadCount { get; set; }
     public string? VideoRoomId { get; set; }
 }

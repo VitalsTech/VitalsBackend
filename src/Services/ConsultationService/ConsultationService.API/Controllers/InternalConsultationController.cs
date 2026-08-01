@@ -42,4 +42,68 @@ public sealed class InternalConsultationController : ControllerBase
 
         return Ok(new { doctorId = session.DoctorId, sessionId = session.Id });
     }
+
+    /// <summary>
+    /// Sessions of one doctor (all of their identity ids) inside a time window, for calendar enrichment.
+    /// </summary>
+    [HttpGet("doctors/sessions")]
+    public async Task<ActionResult<IReadOnlyList<DoctorCalendarSessionDto>>> GetDoctorSessions(
+        [FromQuery] string doctorIds,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] DateTime? openSince,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = (doctorIds ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => Guid.TryParse(part, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return BadRequest(new { error = "doctorIds is required." });
+
+        if (to <= from)
+            return BadRequest(new { error = "to must be greater than from." });
+
+        var sessions = await _sessions.GetByDoctorInRangeAsync(
+            ids,
+            ToUtc(from),
+            ToUtc(to),
+            openSince.HasValue ? ToUtc(openSince.Value) : null,
+            cancellationToken);
+
+        var terminalStatuses = new[] { "Completed", "Cancelled", "Expired" };
+
+        return Ok(sessions.Select(s => new DoctorCalendarSessionDto
+        {
+            SessionId = s.Id,
+            PatientId = s.PatientId,
+            DoctorId = s.DoctorId,
+            Type = s.Type.ToString(),
+            Status = s.Status.ToString(),
+            IsOpen = !terminalStatuses.Contains(s.Status.ToString()),
+            UrgencyLevel = s.UrgencyLevel,
+            ExpectedDurationMinutes = s.ExpectedDurationMinutes,
+            TriageSessionId = s.TriageSessionId,
+            RoutingDecisionId = s.RoutingDecisionId,
+            ScheduledSlotId = s.ScheduledSlotId,
+            ScheduledAt = s.ScheduledAt ?? s.StartedAt ?? s.CreatedAt,
+            CreatedAt = s.CreatedAt,
+            StartedAt = s.StartedAt,
+            CompletedAt = s.CompletedAt,
+            LastActivityAt = s.LastActivityAt,
+            DoctorUnreadCount = s.DoctorUnreadCount,
+            VideoRoomId = s.VideoRoomId
+        }).ToList());
+    }
+
+    /// <summary>Столбцы времени — timestamptz, Npgsql отклоняет Unspecified из query string.</summary>
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
 }

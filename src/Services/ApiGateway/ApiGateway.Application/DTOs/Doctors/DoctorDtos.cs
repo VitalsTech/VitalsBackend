@@ -30,3 +30,19 @@ public sealed class DoctorScheduleResponseDto
     public Guid DoctorId { get; set; }
     public IReadOnlyList<DoctorScheduleSlotDto> Slots { get; set; } = Array.Empty<DoctorScheduleSlotDto>();
 }
+
+public sealed class UpdateDoctorProfileRequestDto
+{
+    public string? Specialization { get; set; }
+    public string? Biography { get; set; }
+    public string? AcademicDegree { get; set; }
+}
+
+public sealed class UpsertDoctorScheduleSlotRequestDto
+{
+    public Guid? Id { get; set; }
+    public DateTime StartsAt { get; set; }
+    public DateTime EndsAt { get; set; }
+    public bool IsAvailable { get; set; } = true;
+    public bool IsOnline { get; set; }
+}

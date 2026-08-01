@@ -26,7 +26,9 @@
 | GET   | `/api/triage/patients/{patientId}/sessions?limit=5` | Список сессий пациента для врача (403 без grant/консультации) |
 
 
-Требуется JWT (Bearer). Internal: `GET /internal/triage/sessions/{id}`.
+Требуется JWT (Bearer). Internal (по `X-Service-Key`):
+`GET /internal/triage/sessions/{id}`, `GET /internal/triage/patients/{patientId}/sessions?limit=1`
+(второй использует Gateway для календаря врача, когда у консультации нет `triageSessionId`).
 
 Gateway: `GET /api/v1/triage/patients/{patientId}/sessions`.
 

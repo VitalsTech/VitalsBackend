@@ -38,6 +38,8 @@ public sealed class NotificationDeliveryResponse
     public int AttemptCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
+    public string? Category { get; set; }
+    public Guid? PatientId { get; set; }
 }
 
 public sealed class ProcessEventResponse

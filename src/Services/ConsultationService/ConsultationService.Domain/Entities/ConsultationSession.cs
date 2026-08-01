@@ -14,6 +14,12 @@ public sealed class ConsultationSession
     public int ExpectedDurationMinutes { get; set; }
     public Guid? RoutingDecisionId { get; set; }
     public Guid? TriageSessionId { get; set; }
+
+    /// <summary>Время приёма из забронированного слота расписания.</summary>
+    public DateTime? ScheduledAt { get; set; }
+
+    /// <summary>Слот расписания врача (UserService), под который создана консультация.</summary>
+    public Guid? ScheduledSlotId { get; set; }
     public bool PatientConsentGiven { get; set; }
     public DateTime? PatientConsentAt { get; set; }
     public bool VideoRecordingConsent { get; set; }

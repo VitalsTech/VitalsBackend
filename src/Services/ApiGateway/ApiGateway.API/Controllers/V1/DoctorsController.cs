@@ -14,8 +14,13 @@ namespace ApiGateway.API.Controllers.V1;
 public sealed class DoctorsController : GatewayControllerBase
 {
     private readonly IBackendForwarder _backend;
+    private readonly IDoctorCalendarService _calendar;
 
-    public DoctorsController(IBackendForwarder backend) => _backend = backend;
+    public DoctorsController(IBackendForwarder backend, IDoctorCalendarService calendar)
+    {
+        _backend = backend;
+        _calendar = calendar;
+    }
 
     /// <summary>
     /// Поиск врачей по ФИО (query) и/или специализации.
@@ -72,4 +77,49 @@ public sealed class DoctorsController : GatewayControllerBase
         var path = $"api/doctors/{doctorId}/schedule?{string.Join("&", query)}";
         return Forward(_backend.ForwardAsync("user", HttpMethod.Get, path, ForwardContext, cancellationToken: cancellationToken), cancellationToken);
     }
+
+    /// <summary>
+    /// Календарь текущего врача: слоты + кем занят слот, результат триажа и анамнез пациента.
+    /// </summary>
+    [HttpGet("me/calendar")]
+    [Authorize(Roles = "Doctor")]
+    [ProducesResponseType(typeof(DoctorCalendarResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<DoctorCalendarResponseDto>> GetMyCalendar(
+        [FromQuery] DateTime? from,
+        [FromQuery] int days = 7,
+        CancellationToken cancellationToken = default)
+    {
+        if (CurrentUserId is not { } doctorId)
+            return Unauthorized(new { error = "Неверный идентификатор пользователя." });
+
+        var calendar = await _calendar.GetCalendarAsync(
+            doctorId,
+            CurrentIdentityIds,
+            from,
+            days,
+            ForwardContext,
+            cancellationToken);
+
+        return Ok(calendar);
+    }
+
+    [HttpPatch("me/profile")]
+    [Authorize(Roles = "Doctor")]
+    public Task<IActionResult> UpdateMyProfile(
+        [FromBody] UpdateDoctorProfileRequestDto request,
+        CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardJsonAsync("user", HttpMethod.Patch, "api/doctors/me/profile", ForwardContext, request, cancellationToken), cancellationToken);
+
+    [HttpPost("me/schedule/slots")]
+    [Authorize(Roles = "Doctor")]
+    public Task<IActionResult> UpsertScheduleSlot(
+        [FromBody] UpsertDoctorScheduleSlotRequestDto request,
+        CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardJsonAsync("user", HttpMethod.Post, "api/doctors/me/schedule/slots", ForwardContext, request, cancellationToken), cancellationToken);
+
+    [HttpDelete("me/schedule/slots/{slotId:guid}")]
+    [Authorize(Roles = "Doctor")]
+    public Task<IActionResult> DeleteScheduleSlot(Guid slotId, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardAsync("user", HttpMethod.Delete, $"api/doctors/me/schedule/slots/{slotId}", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
 }

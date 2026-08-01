@@ -179,6 +179,7 @@ public sealed class NotificationAppService : INotificationService
         Body = log.Body,
         AttemptCount = log.AttemptCount,
         CreatedAt = log.CreatedAt,
-        DeliveredAt = log.DeliveredAt
+        DeliveredAt = log.DeliveredAt,
+        Category = NotificationCategoryResolver.Resolve(log.EventType)
     };
 }

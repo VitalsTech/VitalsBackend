@@ -77,4 +77,8 @@ public sealed class MedicalRecordsController : GatewayControllerBase
     [HttpDelete("access-grants/{grantId:guid}")]
     public Task<IActionResult> RevokeAccessGrant(Guid patientId, Guid grantId, CancellationToken cancellationToken) =>
         Forward(_backend.ForwardAsync("medical", HttpMethod.Delete, $"api/medical-records/patients/{patientId}/access-grants/{grantId}", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
+
+    [HttpGet("attachments")]
+    public Task<IActionResult> ListAttachments(Guid patientId, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardAsync("medical", HttpMethod.Get, $"api/medical-records/patients/{patientId}/attachments", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
 }

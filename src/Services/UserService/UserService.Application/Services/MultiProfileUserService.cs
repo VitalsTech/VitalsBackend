@@ -24,6 +24,7 @@ namespace UserService.Application.Services
         Task<bool> HasProfileAsync(Guid userPublicId, ProfileType profileType);
         Task<UserWithProfilesDto?> GetUserByPhoneAsync(string phone);
         Task<UserWithProfilesDto?> GetUserByEmailAsync(string email);
+        Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request);
     }
 
     public class MultiProfileUserService : IMultiProfileUserService
@@ -443,6 +444,34 @@ namespace UserService.Application.Services
                 return null;
 
             return await GetUserWithProfilesAsync(user.PublicId);
+        }
+
+        public async Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request)
+        {
+            var user = await _userRepository.GetByPublicIdAsync(userPublicId)
+                ?? throw new UserNotFoundException($"User {userPublicId} not found.");
+
+            var profile = await _userRepository.GetProfileByUserAndTypeAsync(user.Id, ProfileType.Doctor)
+                ?? throw new InvalidOperationException("У пользователя нет профиля врача.");
+
+            if (!profile.IsActive)
+                throw new InvalidOperationException("Профиль врача неактивен.");
+
+            if (profile.DoctorProfile is null)
+                throw new InvalidOperationException("Профиль врача не найден.");
+
+            if (!string.IsNullOrWhiteSpace(request.Specialization))
+                profile.DoctorProfile.Specialization = request.Specialization.Trim();
+
+            if (request.Biography is not null)
+                profile.DoctorProfile.Biography = string.IsNullOrWhiteSpace(request.Biography) ? null : request.Biography.Trim();
+
+            if (request.AcademicDegree is not null)
+                profile.DoctorProfile.AcademicDegree = string.IsNullOrWhiteSpace(request.AcademicDegree) ? null : request.AcademicDegree.Trim();
+
+            _userRepository.UpdateProfile(profile);
+            await _userRepository.SaveChangesAsync();
+            return await GetUserWithProfilesAsync(userPublicId);
         }
     }
     public class PatientProfileData
