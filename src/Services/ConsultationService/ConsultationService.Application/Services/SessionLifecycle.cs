@@ -23,6 +23,8 @@ internal static class SessionLifecycle
             (ConsultationStatus.Active, ConsultationStatus.DoctorLeft) => true,
             (ConsultationStatus.Active, ConsultationStatus.Completed) => true,
             (ConsultationStatus.Paused, ConsultationStatus.Active) => true,
+            (ConsultationStatus.Paused, ConsultationStatus.DoctorLeft) => true,
+            (ConsultationStatus.Paused, ConsultationStatus.Completed) => true,
             (ConsultationStatus.DoctorLeft, ConsultationStatus.Completed) => true,
             (ConsultationStatus.DoctorLeft, ConsultationStatus.Active) => true,
             (_, ConsultationStatus.Cancelled) when from is not ConsultationStatus.Completed and not ConsultationStatus.Cancelled => true,

@@ -12,13 +12,8 @@ namespace AITriageService.API.Controllers;
 public sealed class TriageController : ControllerBase
 {
     private readonly ITriageOrchestrator _triage;
-    private readonly IMedicalRecordContextClient _medicalRecord;
 
-    public TriageController(ITriageOrchestrator triage, IMedicalRecordContextClient medicalRecord)
-    {
-        _triage = triage;
-        _medicalRecord = medicalRecord;
-    }
+    public TriageController(ITriageOrchestrator triage) => _triage = triage;
 
     [HttpPost]
     public async Task<ActionResult<TriageSessionResponse>> CreateSession(
@@ -47,7 +42,7 @@ public sealed class TriageController : ControllerBase
         Ok(await _triage.ProcessMessageAsync(sessionId, request, cancellationToken));
 
     /// <summary>
-    /// Завершить триаж и записать маршрут в медкарту (mock при отсутствии оценки LLM).
+    /// Завершить триаж: финальная оценка YandexGPT (если ещё не было) → routing + медкарта.
     /// </summary>
     [HttpPost("{sessionId:guid}/complete")]
     public async Task<ActionResult<TriageSessionResponse>> CompleteSession(
@@ -55,16 +50,17 @@ public sealed class TriageController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _triage.CompleteSessionAsync(sessionId, cancellationToken));
 
-    private async Task<bool> CanAccessPatientAsync(Guid patientId, CancellationToken cancellationToken)
+    private Task<bool> CanAccessPatientAsync(Guid patientId, CancellationToken _)
     {
         var ids = UserClaims.GetIdentityIds(User);
         if (ids.Contains(patientId))
-            return true;
+            return Task.FromResult(true);
 
-        if (!UserClaims.IsInAppRole(User, "Doctor"))
-            return false;
+        // MVP: врач может читать триаж любого пациента (как state/history в медкарте).
+        if (UserClaims.IsInAppRole(User, "Doctor"))
+            return Task.FromResult(true);
 
-        return await _medicalRecord.DoctorHasAccessAsync(patientId, ids, cancellationToken);
+        return Task.FromResult(false);
     }
 }
 
@@ -74,41 +70,45 @@ public sealed class TriageController : ControllerBase
 public sealed class PatientTriageSessionsController : ControllerBase
 {
     private readonly ITriageOrchestrator _triage;
-    private readonly IMedicalRecordContextClient _medicalRecord;
 
-    public PatientTriageSessionsController(
-        ITriageOrchestrator triage,
-        IMedicalRecordContextClient medicalRecord)
-    {
-        _triage = triage;
-        _medicalRecord = medicalRecord;
-    }
+    public PatientTriageSessionsController(ITriageOrchestrator triage) => _triage = triage;
 
     /// <summary>
-    /// Список сессий триажа пациента (для врача с grant/консультацией или самого пациента).
+    /// Список сессий триажа пациента (для врача или самого пациента).
+    /// <paramref name="alsoPatientIds"/> — доп. PublicId/ProfileId того же пациента (через запятую).
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<TriageSessionResponse>>> ListSessions(
         Guid patientId,
         [FromQuery] int limit = 5,
+        [FromQuery] string? alsoPatientIds = null,
         CancellationToken cancellationToken = default)
     {
+        var patientIds = ParsePatientIds(patientId, alsoPatientIds);
         var ids = UserClaims.GetIdentityIds(User);
-        var isPatientSelf = ids.Contains(patientId);
+        var isPatientSelf = patientIds.Any(ids.Contains);
         var isDoctor = UserClaims.IsInAppRole(User, "Doctor");
 
-        if (!isPatientSelf)
-        {
-            if (!isDoctor)
-                return Forbid();
+        if (!isPatientSelf && !isDoctor)
+            return Forbid();
 
-            var allowed = await _medicalRecord.DoctorHasAccessAsync(patientId, ids, cancellationToken);
-            if (!allowed)
-                return Forbid();
+        var sessions = await _triage.GetSessionsByPatientsAsync(patientIds, limit, cancellationToken);
+        return Ok(sessions);
+    }
+
+    private static List<Guid> ParsePatientIds(Guid patientId, string? alsoPatientIds)
+    {
+        var result = new HashSet<Guid> { patientId };
+        if (!string.IsNullOrWhiteSpace(alsoPatientIds))
+        {
+            foreach (var part in alsoPatientIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Guid.TryParse(part, out var id) && id != Guid.Empty)
+                    result.Add(id);
+            }
         }
 
-        var sessions = await _triage.GetSessionsByPatientAsync(patientId, limit, cancellationToken);
-        return Ok(sessions);
+        return result.ToList();
     }
 }
 
@@ -128,6 +128,19 @@ public sealed class InternalTriageController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<TriageSessionResponse>>> GetPatientSessions(
         Guid patientId,
         [FromQuery] int limit = 1,
-        CancellationToken cancellationToken = default) =>
-        Ok(await _triage.GetSessionsByPatientAsync(patientId, limit, cancellationToken));
+        [FromQuery] string? alsoPatientIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var patientIds = new HashSet<Guid> { patientId };
+        if (!string.IsNullOrWhiteSpace(alsoPatientIds))
+        {
+            foreach (var part in alsoPatientIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Guid.TryParse(part, out var id) && id != Guid.Empty)
+                    patientIds.Add(id);
+            }
+        }
+
+        return Ok(await _triage.GetSessionsByPatientsAsync(patientIds.ToList(), limit, cancellationToken));
+    }
 }

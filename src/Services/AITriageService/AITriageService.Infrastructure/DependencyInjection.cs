@@ -20,6 +20,7 @@ public static class DependencyInjection
     public static IServiceCollection AddTriageInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<MedicalRecordServiceOptions>(configuration.GetSection(MedicalRecordServiceOptions.SectionName));
+        services.Configure<RoutingServiceOptions>(configuration.GetSection(RoutingServiceOptions.SectionName));
         services.Configure<KafkaOptions>(configuration.GetSection(KafkaOptions.SectionName));
         services.Configure<MlServicesOptions>(configuration.GetSection(MlServicesOptions.SectionName));
         services.AddVitalsKafka(configuration, options =>
@@ -37,7 +38,16 @@ public static class DependencyInjection
         services.AddSingleton<ISymptomParser, RuleBasedSymptomParser>();
         RegisterMlServices(services, configuration);
         services.AddScoped<ITriageOrchestrator, TriageOrchestrator>();
-        services.AddSingleton<ITriageEventPublisher, KafkaTriageEventPublisher>();
+        services.AddHttpClient<IRoutingDispatchClient, RoutingDispatchClient>(client =>
+        {
+            var apiKey = configuration["ServiceAuth:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("X-Service-Key", apiKey);
+                client.DefaultRequestHeaders.Add("X-Service-Name", "ai-triage-service");
+            }
+        });
+        services.AddScoped<ITriageEventPublisher, KafkaTriageEventPublisher>();
 
         services.AddHttpClient<IMedicalRecordContextClient, MedicalRecordContextClient>();
 
@@ -47,16 +57,28 @@ public static class DependencyInjection
     private static void RegisterMlServices(IServiceCollection services, IConfiguration configuration)
     {
         var ml = configuration.GetSection(MlServicesOptions.SectionName).Get<MlServicesOptions>() ?? new MlServicesOptions();
+
+        if (ml.UseStubNer || string.IsNullOrWhiteSpace(ml.NerEndpoint))
+            services.AddScoped<INerService, StubNerService>();
+        else
+            services.AddHttpClient<INerService, HttpNerService>(client =>
+                client.Timeout = TimeSpan.FromSeconds(Math.Clamp(ml.TimeoutSeconds, 5, 120)));
+
         if (ml.UseStubModels)
         {
-            services.AddScoped<INerService, StubNerService>();
             services.AddScoped<ILlmTriageService, StubLlmTriageService>();
             return;
         }
 
-        services.AddHttpClient<INerService, HttpNerService>(client =>
-            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(ml.TimeoutSeconds, 5, 120)));
-        services.AddHttpClient<ILlmTriageService, HttpLlmTriageService>(client =>
+        var provider = (ml.Provider ?? "Yandex").Trim();
+        if (provider.Equals("Http", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddHttpClient<ILlmTriageService, HttpLlmTriageService>(client =>
+                client.Timeout = TimeSpan.FromSeconds(Math.Clamp(ml.TimeoutSeconds, 5, 120)));
+            return;
+        }
+
+        services.AddHttpClient<ILlmTriageService, YandexGptLlmTriageService>(client =>
             client.Timeout = TimeSpan.FromSeconds(Math.Clamp(ml.TimeoutSeconds, 5, 120)));
     }
 }

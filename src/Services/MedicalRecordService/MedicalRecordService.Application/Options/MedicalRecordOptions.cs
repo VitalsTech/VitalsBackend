@@ -34,3 +34,9 @@ public sealed class ConsultationServiceOptions
     public const string SectionName = "ConsultationService";
     public string BaseUrl { get; set; } = "http://consultation";
 }
+
+public sealed class UserServiceOptions
+{
+    public const string SectionName = "UserService";
+    public string BaseUrl { get; set; } = "http://userservice";
+}

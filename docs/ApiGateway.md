@@ -17,6 +17,7 @@
 | Triage | `/api/v1/triage/*` | AITriageService |
 | Consultations | `/api/v1/consultations/*` | ConsultationService |
 | Prescriptions | `/api/v1/prescriptions/*` | PrescriptionService |
+| LabOrders | `/api/v1/lab-orders/*` | PrescriptionService |
 | Notifications | `/api/v1/notifications/*` | NotificationService |
 
 ### YARP (только прозрачный proxy)

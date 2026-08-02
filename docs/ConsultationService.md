@@ -30,9 +30,12 @@
 | POST | `/api/consultations/{id}/consent` | Согласие на обработку данных |
 | GET/POST | `/api/consultations/{id}/messages` | История / отправка |
 | POST | `/api/consultations/{id}/pause`, `/resume` | Пауза |
-| POST | `/api/consultations/{id}/doctor-leave` | Врач завершил |
-| POST | `/api/consultations/{id}/complete` | Протокол консультации |
-| POST | `/api/consultations/{id}/confirm` | Подтверждение пациента |
+| POST | `/api/consultations/{id}/doctor-leave` | Врач вышел без протокола → `DoctorLeft` |
+| POST | `/api/consultations/{id}/complete` | Протокол + закрытие → `Completed`; в ответе и в `GET` есть `protocol` |
+| POST | `/api/consultations/{id}/confirm` | Опционально для пациента; если уже `Completed` — идемпотентно вернёт сессию |
+
+После `/complete` консультация сразу `Completed` (не ждёт confirm). Протокол пишется в медкарту
+(`ConsultationCompleted` + `DiagnosisConfirmed`), доступен в `GET /api/consultations/{id}` как `protocol`.
 | POST | `/api/consultations/{id}/cancel` | Отмена |
 | POST | `/api/consultations/{id}/video/start` | Комната SFU (stub) |
 | POST | `/api/consultations/{id}/emergency` | Экстренный протокол |

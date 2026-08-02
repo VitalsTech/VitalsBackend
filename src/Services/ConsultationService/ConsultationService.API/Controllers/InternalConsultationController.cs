@@ -44,6 +44,32 @@ public sealed class InternalConsultationController : ControllerBase
     }
 
     /// <summary>
+    /// Doctor ↔ patient link check (any session status). patientIds / doctorIds — comma-separated.
+    /// </summary>
+    [HttpGet("doctor-patient-link")]
+    public async Task<ActionResult<object>> DoctorPatientLink(
+        [FromQuery] string doctorIds,
+        [FromQuery] string patientIds,
+        CancellationToken cancellationToken)
+    {
+        static Guid[] Parse(string? raw) =>
+            (raw ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(part => Guid.TryParse(part, out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToArray();
+
+        var doctors = Parse(doctorIds);
+        var patients = Parse(patientIds);
+        if (doctors.Length == 0 || patients.Length == 0)
+            return BadRequest(new { error = "doctorIds and patientIds are required." });
+
+        var linked = await _sessions.ExistsForDoctorsAndPatientsAsync(doctors, patients, cancellationToken);
+        return Ok(new { linked });
+    }
+
+    /// <summary>
     /// Sessions of one doctor (all of their identity ids) inside a time window, for calendar enrichment.
     /// </summary>
     [HttpGet("doctors/sessions")]

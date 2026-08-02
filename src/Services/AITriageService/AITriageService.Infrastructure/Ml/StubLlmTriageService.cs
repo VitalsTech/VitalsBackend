@@ -57,14 +57,24 @@ public sealed class StubLlmTriageService : ILlmTriageService
         if (hasDiabetes && hasNumbness)
             additional.Add("уровень глюкозы за последние сутки");
 
+        var patientTurns = context.DialogHistory.Count(m =>
+            string.Equals(m.Role, "Patient", StringComparison.OrdinalIgnoreCase)) + 1;
+        var ready = emergency || (patientTurns >= 3 && additional.Count == 0);
+
         var result = new LlmTriageResultDto
         {
             Hypotheses = hypotheses,
             UrgencyLevel = urgency,
-            NextQuestion = nextQuestion,
+            NextQuestion = ready && !emergency ? string.Empty : nextQuestion,
             RecommendedAction = action,
-            AdditionalDataNeeded = additional,
-            EmergencyWarning = emergency
+            AdditionalDataNeeded = ready ? Array.Empty<string>() : additional,
+            EmergencyWarning = emergency,
+            ReadyToComplete = ready,
+            CompleteSuggestion = ready
+                ? (emergency
+                    ? "Нажмите «Завершить триаж» для срочного маршрута. При угрозе жизни — 103."
+                    : "Ключевых деталей достаточно. Можете нажать «Завершить триаж».")
+                : null
         };
 
         return Task.FromResult(result);

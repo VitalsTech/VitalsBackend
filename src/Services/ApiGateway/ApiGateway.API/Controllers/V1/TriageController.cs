@@ -28,7 +28,7 @@ public sealed class TriageController : GatewayControllerBase
     [HttpPost("{sessionId:guid}/messages")]
     public Task<IActionResult> SendMessage(Guid sessionId, [FromBody] SendTriageMessageRequestDto request, CancellationToken cancellationToken)
     {
-        var backendRequest = new { Message = request.Content };
+        var backendRequest = new { Message = request.Text };
         return Forward(_backend.ForwardJsonAsync("triage", HttpMethod.Post, $"api/triage/sessions/{sessionId}/messages", ForwardContext, backendRequest, cancellationToken), cancellationToken);
     }
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using RoutingService.Application.DTOs;
 using RoutingService.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +10,12 @@ namespace RoutingService.API.Controllers;
 public sealed class InternalRoutingController : ControllerBase
 {
     private readonly IRoutingOrchestrator _orchestrator;
+    private readonly IRoutingDecisionRepository _decisions;
 
-    public InternalRoutingController(IRoutingOrchestrator orchestrator)
+    public InternalRoutingController(IRoutingOrchestrator orchestrator, IRoutingDecisionRepository decisions)
     {
         _orchestrator = orchestrator;
+        _decisions = decisions;
     }
 
     [HttpPost("triage-completed")]
@@ -30,12 +33,11 @@ public sealed class InternalRoutingController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RoutingDecisionResponse>> GetDecision(Guid decisionId, CancellationToken cancellationToken)
     {
-        var decision = await HttpContext.RequestServices
-            .GetRequiredService<IRoutingDecisionRepository>()
-            .GetByIdAsync(decisionId, cancellationToken);
-
+        var decision = await _decisions.GetByIdAsync(decisionId, cancellationToken);
         if (decision is null)
             return NotFound();
+
+        var labs = JsonSerializer.Deserialize<List<string>>(decision.RecommendedLabsJson) ?? [];
 
         return Ok(new RoutingDecisionResponse
         {
@@ -49,10 +51,23 @@ public sealed class InternalRoutingController : ControllerBase
             AssignedDoctorName = decision.AssignedDoctorName,
             Priority = decision.Priority,
             UrgencyLevel = decision.UrgencyLevel,
+            RecommendedLabs = labs,
             PatientMessage = decision.PatientMessage,
             Rationale = decision.Rationale,
             AlgorithmVersion = decision.AlgorithmVersion,
             IsFallback = decision.IsFallback
         });
+    }
+
+    /// <summary>Анализы из протокола консультации → шаг маршрута + recommendedLabs в decision.</summary>
+    [HttpPost("patients/{patientId:guid}/labs")]
+    [ProducesResponseType(typeof(PatientActiveRouteResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PatientActiveRouteResponse>> AppendPostConsultationLabs(
+        Guid patientId,
+        [FromBody] AppendPostConsultationLabsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var route = await _orchestrator.AppendPostConsultationLabsAsync(patientId, request, cancellationToken);
+        return Ok(route);
     }
 }

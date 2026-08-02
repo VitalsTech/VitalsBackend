@@ -60,6 +60,23 @@ public sealed class ConsultationRepository : IConsultationRepository
             .ThenByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<bool> ExistsForDoctorsAndPatientsAsync(
+        IReadOnlyList<Guid> doctorIds,
+        IReadOnlyList<Guid> patientIds,
+        CancellationToken cancellationToken = default)
+    {
+        var doctors = doctorIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+        var patients = patientIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (doctors.Length == 0 || patients.Length == 0)
+            return false;
+
+        return await _db.Sessions
+            .AsNoTracking()
+            .AnyAsync(
+                s => doctors.Contains(s.DoctorId) && patients.Contains(s.PatientId),
+                cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ConsultationSession>> GetByDoctorInRangeAsync(
         IReadOnlyList<Guid> doctorIds,
         DateTime from,

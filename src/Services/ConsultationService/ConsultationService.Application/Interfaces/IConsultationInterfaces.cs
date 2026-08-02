@@ -17,6 +17,14 @@ public interface IConsultationRepository
     Task<ConsultationSession?> FindLatestByPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// True if any doctor identity has any session (incl. completed) with any of the patient identities.
+    /// </summary>
+    Task<bool> ExistsForDoctorsAndPatientsAsync(
+        IReadOnlyList<Guid> doctorIds,
+        IReadOnlyList<Guid> patientIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Doctor calendar source: sessions anchored (ScheduledAt ?? StartedAt ?? CreatedAt) inside the window,
     /// plus open sessions with activity since <paramref name="openSince"/> regardless of date.
     /// </summary>
@@ -67,6 +75,37 @@ public interface IMedicalRecordEventClient
 {
     Task AppendConsultationEventAsync(Guid patientId, string eventType, object payload, Guid correlationId, CancellationToken cancellationToken = default);
     Task GrantDoctorAccessAsync(Guid patientId, Guid doctorId, CancellationToken cancellationToken = default);
+}
+
+public interface ILabOrderClient
+{
+    Task CreateFromConsultationAsync(
+        Guid patientId,
+        Guid doctorId,
+        Guid consultationId,
+        IReadOnlyList<string> labNames,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IPrescriptionClient
+{
+    Task CreateFromConsultationAsync(
+        Guid patientId,
+        Guid doctorId,
+        Guid consultationId,
+        string? diagnosis,
+        IReadOnlyList<string> prescriptionLines,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IRoutingClient
+{
+    Task AppendPostConsultationLabsAsync(
+        Guid patientId,
+        Guid doctorId,
+        Guid consultationId,
+        IReadOnlyList<string> labs,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IConsultationEventPublisher

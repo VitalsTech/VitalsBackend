@@ -90,9 +90,7 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
             MedicalContext = medicalContext
         }, cancellationToken);
 
-        var assistantText = llmResult.EmergencyWarning
-            ? $"{llmResult.RecommendedAction}\n\n{llmResult.NextQuestion}"
-            : $"{llmResult.NextQuestion}\n\nРекомендация: {llmResult.RecommendedAction}\n\nВажно: это предварительная оценка, а не диагноз. Назначение лекарств возможно только врачом.";
+        var assistantText = BuildAssistantReply(llmResult);
 
         var assistantMessage = new TriageMessage
         {
@@ -118,15 +116,14 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
         session.UpdatedAt = DateTime.UtcNow;
         await _sessions.SaveChangesAsync(cancellationToken);
 
-        await _publisher.PublishTriageCompletedAsync(sessionId, session.PatientId, llmResult, cancellationToken);
-
+        // Маршрутизация только на complete — не на каждое сообщение.
         session = await _sessions.GetByIdAsync(sessionId, cancellationToken) ?? session;
         return MapSession(session);
     }
 
     /// <summary>
-    /// Marks triage as completed. If no LLM assessment exists yet, uses mock routing data
-    /// (see docs/AITriageService.md — «Завершение триажа (mock)»).
+    /// Завершает триаж и запускает routing. Оценка — из последнего LLM-ответа
+    /// или финальный вызов модели по истории диалога (без mock).
     /// </summary>
     public async Task<TriageSessionResponse> CompleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
@@ -138,16 +135,28 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
 
         if (latestAssessment is null)
         {
-            llmResult = new LlmTriageResultDto
-            {
-                UrgencyLevel = 2,
-                RecommendedAction = "Запись к терапевту в течение 3 дней. При ухудшении — срочная консультация.",
-                NextQuestion = string.Empty,
-                EmergencyWarning = false
-            };
-            session.LatestUrgencyLevel = llmResult.UrgencyLevel;
+            var history = session.Messages
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new TriageMessageDto { Role = m.Role, Content = m.Content, CreatedAt = m.CreatedAt })
+                .ToList();
 
-            var mockAssessment = new TriageAssessment
+            var lastPatient = history.LastOrDefault(m =>
+                string.Equals(m.Role, "Patient", StringComparison.OrdinalIgnoreCase));
+
+            var medicalContext = await _medicalRecord.GetContextAsync(session.PatientId, cancellationToken);
+            llmResult = await _llm.AnalyzeAsync(new TriagePromptContext
+            {
+                SessionId = sessionId,
+                PatientId = session.PatientId,
+                CurrentMessage = lastPatient?.Content ?? "Пациент завершил триаж. Сформируй итоговую оценку по имеющемуся диалогу.",
+                DialogHistory = history,
+                ParsedEntities = Array.Empty<ExtractedEntityDto>(),
+                NerEntities = Array.Empty<NerEntityDto>(),
+                MedicalContext = medicalContext
+            }, cancellationToken);
+
+            session.LatestUrgencyLevel = llmResult.UrgencyLevel;
+            var finalAssessment = new TriageAssessment
             {
                 SessionId = sessionId,
                 MessageId = session.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault()?.Id ?? Guid.Empty,
@@ -157,7 +166,7 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
                 LlmResultJson = JsonSerializer.Serialize(llmResult),
                 AssistantReply = llmResult.RecommendedAction
             };
-            await _sessions.AddAssessmentAsync(mockAssessment, cancellationToken);
+            await _sessions.AddAssessmentAsync(finalAssessment, cancellationToken);
         }
         else
         {
@@ -173,19 +182,45 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
         session.UpdatedAt = DateTime.UtcNow;
         await _sessions.SaveChangesAsync(cancellationToken);
 
-        await _publisher.PublishTriageCompletedAsync(sessionId, session.PatientId, llmResult, cancellationToken);
+        // Kafka (если включён) или sync HTTP в Routing внутри publisher — иначе active-route пустой.
+        var decision = await _publisher.PublishTriageCompletedAsync(sessionId, session.PatientId, llmResult, cancellationToken);
+
         await _medicalRecord.AppendTriageCompletedEventAsync(session.PatientId, sessionId, llmResult, cancellationToken);
 
         _logger.LogInformation("Triage session {SessionId} completed for patient {PatientId}", sessionId, session.PatientId);
-        return MapSession(session);
+        var response = MapSession(session);
+        if (decision is not null)
+        {
+            response.RoutingDecisionId = decision.DecisionId;
+            response.RoutingOutcomeType = decision.OutcomeType;
+            response.AssignedDoctorId = decision.AssignedDoctorId;
+            response.AssignedDoctorName = decision.AssignedDoctorName;
+            response.RecommendedLabs = decision.RecommendedLabs ?? Array.Empty<string>();
+            response.ConsultationSessionId = decision.ConsultationSessionId;
+            if (!string.IsNullOrWhiteSpace(decision.Specialist))
+                response.RecommendedSpecialization = decision.Specialist;
+            if (!string.IsNullOrWhiteSpace(decision.PatientMessage))
+            {
+                response.Recommendation = decision.PatientMessage;
+                response.RecommendationText = decision.PatientMessage;
+            }
+        }
+
+        return response;
     }
 
     public async Task<IReadOnlyList<TriageSessionResponse>> GetSessionsByPatientAsync(
         Guid patientId,
         int limit,
+        CancellationToken cancellationToken = default) =>
+        await GetSessionsByPatientsAsync(new[] { patientId }, limit, cancellationToken);
+
+    public async Task<IReadOnlyList<TriageSessionResponse>> GetSessionsByPatientsAsync(
+        IReadOnlyList<Guid> patientIds,
+        int limit,
         CancellationToken cancellationToken = default)
     {
-        var sessions = await _sessions.GetByPatientIdAsync(patientId, limit, cancellationToken);
+        var sessions = await _sessions.GetByPatientIdsAsync(patientIds, limit, cancellationToken);
         return sessions.Select(MapSession).ToList();
     }
 
@@ -199,6 +234,10 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
     private static TriageSessionResponse MapSession(TriageSession session)
     {
         var latestAssessment = session.Assessments.OrderByDescending(a => a.CreatedAt).FirstOrDefault();
+        var llm = latestAssessment is null
+            ? null
+            : JsonSerializer.Deserialize<LlmTriageResultDto>(latestAssessment.LlmResultJson);
+
         return new TriageSessionResponse
         {
             SessionId = session.Id,
@@ -212,11 +251,43 @@ public sealed class TriageOrchestrator : ITriageOrchestrator
                 .ToList(),
             LatestAssessment = latestAssessment is null ? null : MapAssessment(latestAssessment),
             Urgency = MapUrgencyLabel(session.LatestUrgencyLevel),
-            Recommendation = latestAssessment?.AssistantReply,
-            RecommendationText = latestAssessment?.AssistantReply ?? BuildRecommendation(latestAssessment),
+            Recommendation = llm?.RecommendedAction ?? latestAssessment?.AssistantReply,
+            RecommendationText = llm?.RecommendedAction ?? latestAssessment?.AssistantReply ?? BuildRecommendation(latestAssessment),
             RecommendedSpecialization = "Терапевт",
-            CanBeRemote = session.LatestUrgencyLevel <= 3
+            CanBeRemote = session.LatestUrgencyLevel <= 3,
+            ReadyToComplete = llm?.ReadyToComplete == true &&
+                              !string.Equals(session.Status, "Completed", StringComparison.OrdinalIgnoreCase),
+            CompleteSuggestion = llm?.ReadyToComplete == true ? llm.CompleteSuggestion : null
         };
+    }
+
+    private static string BuildAssistantReply(LlmTriageResultDto llmResult)
+    {
+        const string disclaimer =
+            "Важно: это предварительная оценка, а не диагноз. Назначение лекарств возможно только врачом.";
+
+        if (llmResult.EmergencyWarning)
+        {
+            var text = llmResult.RecommendedAction;
+            if (!string.IsNullOrWhiteSpace(llmResult.CompleteSuggestion))
+                text += "\n\n" + llmResult.CompleteSuggestion;
+            else if (!string.IsNullOrWhiteSpace(llmResult.NextQuestion))
+                text += "\n\n" + llmResult.NextQuestion;
+            return text;
+        }
+
+        if (llmResult.ReadyToComplete)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(llmResult.CompleteSuggestion))
+                parts.Add(llmResult.CompleteSuggestion!);
+            parts.Add($"Рекомендация: {llmResult.RecommendedAction}");
+            parts.Add("Когда будете готовы — нажмите «Завершить триаж».");
+            parts.Add(disclaimer);
+            return string.Join("\n\n", parts);
+        }
+
+        return $"{llmResult.NextQuestion}\n\nРекомендация: {llmResult.RecommendedAction}\n\n{disclaimer}";
     }
 
     private static string MapUrgencyLabel(int level) => level switch

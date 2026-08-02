@@ -21,6 +21,17 @@ public interface IDoctorRecipientResolver
 public interface IConsultationDoctorClient
 {
     Task<Guid?> GetLatestDoctorIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    Task<bool> DoctorHasSessionWithPatientAsync(
+        IReadOnlyList<Guid> doctorIdentityIds,
+        IReadOnlyList<Guid> patientIdentityIds,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IUserIdentityClient
+{
+    /// <summary>PublicId ∪ profile ids (always includes input).</summary>
+    Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
 public interface IMedicalRecordEventPublisher

@@ -394,6 +394,15 @@ internal sealed class NullMultiProfileUserService : IMultiProfileUserService
 
     public Task<UserWithProfilesDto?> GetUserByEmailAsync(string email)
         => throw new NotSupportedException();
+
+    public Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request)
+        => throw new NotSupportedException();
+
+    public Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id)
+        => throw new NotSupportedException();
+
+    public Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id)
+        => throw new NotSupportedException();
 }
 
 internal sealed class InMemoryUserRepository : IUserRepository

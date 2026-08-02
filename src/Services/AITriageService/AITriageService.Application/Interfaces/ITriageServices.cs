@@ -31,9 +31,29 @@ public interface ITriageOrchestrator
     Task<TriageSessionResponse> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task<TriageSessionResponse> CompleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TriageSessionResponse>> GetSessionsByPatientAsync(Guid patientId, int limit, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TriageSessionResponse>> GetSessionsByPatientsAsync(
+        IReadOnlyList<Guid> patientIds,
+        int limit,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ITriageEventPublisher
 {
-    Task PublishTriageCompletedAsync(Guid sessionId, Guid patientId, LlmTriageResultDto result, CancellationToken cancellationToken = default);
+    /// <returns>Decision summary when Kafka off and HTTP routing succeeded; otherwise null (Kafka path).</returns>
+    Task<RoutingDecisionSummaryDto?> PublishTriageCompletedAsync(
+        Guid sessionId,
+        Guid patientId,
+        LlmTriageResultDto result,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>HTTP fallback when Kafka выключен: синхронно создаёт routing decision.</summary>
+public interface IRoutingDispatchClient
+{
+    Task<RoutingDecisionSummaryDto?> DispatchTriageCompletedAsync(
+        Guid sessionId,
+        Guid patientId,
+        LlmTriageResultDto result,
+        CancellationToken cancellationToken = default);
 }

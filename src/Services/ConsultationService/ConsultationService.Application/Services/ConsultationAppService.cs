@@ -17,6 +17,9 @@ public sealed class ConsultationAppService : IConsultationService
     private readonly IMessageRepository _messages;
     private readonly ISessionStateStore _stateStore;
     private readonly IMedicalRecordEventClient _medicalRecord;
+    private readonly ILabOrderClient _labOrders;
+    private readonly IPrescriptionClient _prescriptions;
+    private readonly IRoutingClient _routing;
     private readonly IConsultationEventPublisher _publisher;
     private readonly ISfuSignalingService _sfu;
     private readonly IConsultationChatNotifier _notifier;
@@ -30,6 +33,9 @@ public sealed class ConsultationAppService : IConsultationService
         IMessageRepository messages,
         ISessionStateStore stateStore,
         IMedicalRecordEventClient medicalRecord,
+        ILabOrderClient labOrders,
+        IPrescriptionClient prescriptions,
+        IRoutingClient routing,
         IConsultationEventPublisher publisher,
         ISfuSignalingService sfu,
         IConsultationChatNotifier notifier,
@@ -42,6 +48,9 @@ public sealed class ConsultationAppService : IConsultationService
         _messages = messages;
         _stateStore = stateStore;
         _medicalRecord = medicalRecord;
+        _labOrders = labOrders;
+        _prescriptions = prescriptions;
+        _routing = routing;
         _publisher = publisher;
         _sfu = sfu;
         _notifier = notifier;
@@ -267,7 +276,19 @@ public sealed class ConsultationAppService : IConsultationService
         IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default)
     {
-        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
+        // Не через RequireDoctorSessionAsync: повторное сохранение протокола на Completed должно
+        // проходить (иначе фронт получает 409 «Session is Completed.»).
+        var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
+
+        if (!Matches(session.DoctorId, doctorId, identityIds))
+            throw new UnauthorizedAccessException("Only the assigned doctor can perform this action.");
+
+        if (session.Status is ConsultationStatus.Cancelled or ConsultationStatus.Expired)
+            throw new InvalidOperationException($"Нельзя завершить консультацию в статусе {session.Status}.");
+
+        var wasAlreadyCompleted = session.Status == ConsultationStatus.Completed;
+
         session.ProtocolJson = JsonSerializer.Serialize(request);
 
         var signResult = await _signature.SignAsync(new SignDocumentRequest
@@ -279,20 +300,25 @@ public sealed class ConsultationAppService : IConsultationService
         }, cancellationToken).ConfigureAwait(false);
         session.ProtocolSignature = signResult.Signature;
 
-        await TransitionAsync(session, ConsultationStatus.DoctorLeft, "doctor", doctorId, "Protocol submitted", cancellationToken);
+        if (!wasAlreadyCompleted)
+        {
+            await TransitionAsync(session, ConsultationStatus.Completed, "doctor", doctorId, "Protocol submitted", cancellationToken);
+            session.CompletedAt = DateTime.UtcNow;
+        }
+
+        session.LastActivityAt = DateTime.UtcNow;
         await _sessions.SaveSessionAsync(session, cancellationToken);
 
-        await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "ConsultationProtocolDraft", new
+        await PersistCompletedProtocolAsync(session, request, cancellationToken);
+
+        if (!wasAlreadyCompleted)
         {
-            session.Id,
-            request.Complaints,
-            request.PreliminaryDiagnosisIcd10,
-            request.PreliminaryDiagnosisText,
-            request.Recommendations,
-            request.Prescriptions,
-            request.LabOrders,
-            Signature = session.ProtocolSignature
-        }, session.Id, cancellationToken);
+            await SendSystemMessageAsync(
+                session,
+                "Врач оформил протокол и завершил консультацию.",
+                cancellationToken);
+            await _notifier.NotifyStatusChangedAsync(sessionId, session.Status.ToString(), cancellationToken);
+        }
 
         return MapSession(session);
     }
@@ -309,6 +335,10 @@ public sealed class ConsultationAppService : IConsultationService
         if (!Matches(session.PatientId, patientId, identityIds))
             throw new UnauthorizedAccessException("Only the patient can confirm completion.");
 
+        // Уже закрыта врачом через /complete — идемпотентно вернуть протокол.
+        if (session.Status == ConsultationStatus.Completed)
+            return MapSession(session);
+
         if (session.Status is not (ConsultationStatus.DoctorLeft or ConsultationStatus.Active))
             throw new InvalidOperationException($"Cannot confirm from status {session.Status}.");
 
@@ -316,15 +346,93 @@ public sealed class ConsultationAppService : IConsultationService
         session.CompletedAt = DateTime.UtcNow;
         await _sessions.SaveSessionAsync(session, cancellationToken);
 
-        var protocol = JsonSerializer.Deserialize<CompleteConsultationRequest>(session.ProtocolJson);
+        var protocol = TryReadProtocol(session.ProtocolJson);
+        if (protocol is not null)
+            await PersistCompletedProtocolAsync(session, protocol, cancellationToken);
+
+        await SendSystemMessageAsync(session, "Пациент подтвердил завершение консультации.", cancellationToken);
+        await _notifier.NotifyStatusChangedAsync(sessionId, session.Status.ToString(), cancellationToken);
+        return MapSession(session);
+    }
+
+    private async Task PersistCompletedProtocolAsync(
+        ConsultationSession session,
+        CompleteConsultationRequest protocol,
+        CancellationToken cancellationToken)
+    {
         await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "ConsultationCompleted", new
         {
-            session.Id,
-            session.StartedAt,
-            session.CompletedAt,
-            Protocol = protocol,
-            Signature = session.ProtocolSignature
+            sessionId = session.Id,
+            startedAt = session.StartedAt,
+            completedAt = session.CompletedAt,
+            protocol,
+            signature = session.ProtocolSignature,
+            complaints = protocol.Complaints,
+            anamnesis = protocol.Anamnesis,
+            examinationNotes = protocol.ExaminationNotes,
+            recommendations = protocol.Recommendations,
+            nextVisitDate = protocol.NextVisitDate
         }, session.Id, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(protocol.PreliminaryDiagnosisIcd10) ||
+            !string.IsNullOrWhiteSpace(protocol.PreliminaryDiagnosisText))
+        {
+            await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "DiagnosisConfirmed", new
+            {
+                icd10Code = protocol.PreliminaryDiagnosisIcd10?.Trim() ?? string.Empty,
+                description = string.IsNullOrWhiteSpace(protocol.PreliminaryDiagnosisText)
+                    ? protocol.PreliminaryDiagnosisIcd10?.Trim() ?? string.Empty
+                    : protocol.PreliminaryDiagnosisText.Trim(),
+                source = "consultation",
+                consultationSessionId = session.Id
+            }, session.Id, cancellationToken);
+        }
+
+        var rxLines = (protocol.Prescriptions ?? Array.Empty<string>())
+            .Select(l => l?.Trim())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Cast<string>()
+            .ToList();
+
+        if (rxLines.Count > 0)
+        {
+            var diagnosis = !string.IsNullOrWhiteSpace(protocol.PreliminaryDiagnosisIcd10)
+                ? $"{protocol.PreliminaryDiagnosisIcd10} {protocol.PreliminaryDiagnosisText}".Trim()
+                : protocol.PreliminaryDiagnosisText;
+
+            // Реальный рецепт (draft→signed) + QR/instructions; события в МК пишет PrescriptionService.
+            await _prescriptions.CreateFromConsultationAsync(
+                session.PatientId,
+                session.DoctorId,
+                session.Id,
+                diagnosis,
+                rxLines,
+                cancellationToken);
+        }
+
+        var labs = (protocol.LabOrders ?? Array.Empty<string>())
+            .Select(l => l?.Trim())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (labs.Count > 0)
+        {
+            // Реальные направления + шаг в active-route / recommendedLabs decision.
+            await _labOrders.CreateFromConsultationAsync(
+                session.PatientId,
+                session.DoctorId,
+                session.Id,
+                labs,
+                cancellationToken);
+            await _routing.AppendPostConsultationLabsAsync(
+                session.PatientId,
+                session.DoctorId,
+                session.Id,
+                labs,
+                cancellationToken);
+        }
 
         await _publisher.PublishAsync(_kafka.ConsultationCompletedTopic, new
         {
@@ -334,9 +442,6 @@ public sealed class ConsultationAppService : IConsultationService
             session.CompletedAt,
             Protocol = protocol
         }, cancellationToken);
-
-        await _notifier.NotifyStatusChangedAsync(sessionId, session.Status.ToString(), cancellationToken);
-        return MapSession(session);
     }
 
     public async Task<ConsultationSessionResponse> CancelAsync(
@@ -858,8 +963,35 @@ public sealed class ConsultationAppService : IConsultationService
         LastActivityAt = session.LastActivityAt,
         PatientUnreadCount = session.PatientUnreadCount,
         DoctorUnreadCount = session.DoctorUnreadCount,
-        VideoRoomId = session.VideoRoomId
+        VideoRoomId = session.VideoRoomId,
+        Protocol = TryReadProtocol(session.ProtocolJson),
+        ProtocolSignature = session.ProtocolSignature,
+        HasProtocol = HasStoredProtocol(session.ProtocolJson)
     };
+
+    private static readonly JsonSerializerOptions ProtocolJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private static CompleteConsultationRequest? TryReadProtocol(string? protocolJson)
+    {
+        if (!HasStoredProtocol(protocolJson))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<CompleteConsultationRequest>(protocolJson!, ProtocolJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool HasStoredProtocol(string? protocolJson) =>
+        !string.IsNullOrWhiteSpace(protocolJson) &&
+        protocolJson.Trim() is not ("{}" or "null");
 
     /// <summary>Столбцы времени — timestamptz, Npgsql отклоняет Unspecified из тела запроса.</summary>
     private static DateTime ToUtc(DateTime value) => value.Kind switch

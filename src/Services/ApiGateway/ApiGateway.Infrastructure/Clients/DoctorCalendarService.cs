@@ -383,14 +383,46 @@ public sealed class DoctorCalendarService : IDoctorCalendarService
                 return MapTriage(direct);
         }
 
+        // Триаж мог быть сохранён под ProfileId, а консультация — под PublicId (и наоборот).
+        var aliases = await ResolvePatientIdentityIdsAsync(patientId, context, cancellationToken)
+            .ConfigureAwait(false);
+        var also = string.Join(',', aliases.Where(a => a != patientId));
+        var path = string.IsNullOrEmpty(also)
+            ? $"internal/triage/patients/{patientId}/sessions?limit=1"
+            : $"internal/triage/patients/{patientId}/sessions?limit=1&alsoPatientIds={Uri.EscapeDataString(also)}";
+
         var latest = await GetAsync<List<TriageSessionResponse>>(
             "triage",
-            $"internal/triage/patients/{patientId}/sessions?limit=1",
+            path,
             context,
             cancellationToken).ConfigureAwait(false);
 
         var fallback = latest?.FirstOrDefault();
         return fallback is null ? null : MapTriage(fallback);
+    }
+
+    private async Task<List<Guid>> ResolvePatientIdentityIdsAsync(
+        Guid patientId,
+        BackendForwardContext context,
+        CancellationToken cancellationToken)
+    {
+        var ids = new HashSet<Guid> { patientId };
+        var resolved = await GetAsync<IdentityIdsResponse>(
+            "user",
+            $"internal/users/{patientId}/identity-ids",
+            context,
+            cancellationToken).ConfigureAwait(false);
+
+        if (resolved?.IdentityIds is { Count: > 0 })
+        {
+            foreach (var id in resolved.IdentityIds)
+            {
+                if (id != Guid.Empty)
+                    ids.Add(id);
+            }
+        }
+
+        return ids.ToList();
     }
 
     private static DoctorCalendarPatientDto MapPatient(Guid patientId, UserResponse? user)
@@ -637,6 +669,11 @@ public sealed class DoctorCalendarService : IDoctorCalendarService
         public string Surename { get; set; } = string.Empty;
         public DateTime BirthDate { get; set; }
         public string? Sex { get; set; }
+    }
+
+    private sealed class IdentityIdsResponse
+    {
+        public List<Guid>? IdentityIds { get; set; }
     }
 
     private sealed class TriageSessionResponse

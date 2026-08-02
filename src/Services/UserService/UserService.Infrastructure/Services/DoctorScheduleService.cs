@@ -337,13 +337,17 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
         var horizon = now.AddHours(8);
         var normalizedSpecialty = specialty.Trim().ToLowerInvariant();
 
+        var aliases = ExpandSpecialtyAliases(normalizedSpecialty);
         var doctors = await _db.DoctorProfiles
             .AsNoTracking()
             .Include(d => d.Profile)
             .ThenInclude(p => p.User)
             .Where(d => d.Profile.IsActive && d.Profile.ProfileType == ProfileType.Doctor)
-            .Where(d => d.Specialization.ToLower() == normalizedSpecialty)
             .ToListAsync(cancellationToken);
+
+        doctors = doctors
+            .Where(d => aliases.Any(a => d.Specialization.Contains(a, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
 
         if (doctors.Count == 0)
             return null;
@@ -371,12 +375,11 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
         {
             var hasOnlineSlot = upcomingSlots.Any(s =>
                 s.DoctorProfileId == doctor.Id && s.IsAvailable && s.IsOnline);
-            if (!hasOnlineSlot)
-                continue;
-
+            // Нет слота в ближайшие 8ч — всё равно назначаем врача (чат/запись), иначе triage→route ломается ночью.
             var load = todayLoads.GetValueOrDefault(doctor.Id, 0);
             var seniorBoost = urgencyLevel >= 4 && doctor.Category is DoctorCategory.First or DoctorCategory.Highest ? -1 : 0;
-            var score = load + seniorBoost;
+            var slotPenalty = hasOnlineSlot ? 0 : 50;
+            var score = load + seniorBoost + slotPenalty;
             if (score >= bestScore)
                 continue;
 
@@ -386,13 +389,35 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
                 DoctorId = doctor.Profile.User.PublicId,
                 FullName = $"{doctor.Profile.User.Surename} {doctor.Profile.User.FirstName} {doctor.Profile.User.SecondName}".Trim(),
                 Specialty = doctor.Specialization,
-                IsOnline = true,
+                IsOnline = hasOnlineSlot,
                 TodayLoad = load,
                 IsSenior = doctor.Category is DoctorCategory.First or DoctorCategory.Highest
             };
         }
 
         return best;
+    }
+
+    private static IReadOnlyList<string> ExpandSpecialtyAliases(string specialty)
+    {
+        var list = new List<string> { specialty };
+        switch (specialty)
+        {
+            case "therapist":
+            case "терапевт":
+                list.AddRange(["therapist", "терапевт", "therapy"]);
+                break;
+            case "pediatrician":
+            case "педиатр":
+                list.AddRange(["pediatrician", "педиатр", "pediatrics"]);
+                break;
+            case "cardiologist":
+            case "кардиолог":
+                list.AddRange(["cardiologist", "кардиолог"]);
+                break;
+        }
+
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public async Task EnsureScheduleSlotsAsync(Guid doctorProfileId, CancellationToken cancellationToken = default)

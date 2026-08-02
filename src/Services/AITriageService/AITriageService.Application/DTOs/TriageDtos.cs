@@ -22,6 +22,37 @@ public sealed class TriageSessionResponse
     public string? RecommendationText { get; set; }
     public string? RecommendedSpecialization { get; set; }
     public bool CanBeRemote { get; set; } = true;
+
+    /// <summary>
+    /// ИИ считает анамнез достаточным — фронт показывает CTA «Завершить триаж»
+    /// → POST .../complete.
+    /// </summary>
+    public bool ReadyToComplete { get; set; }
+
+    /// <summary>Короткий текст предложения завершить (если ReadyToComplete).</summary>
+    public string? CompleteSuggestion { get; set; }
+
+    /// <summary>Заполняется после complete, если routing отработал (Kafka off → sync HTTP).</summary>
+    public Guid? RoutingDecisionId { get; set; }
+    public string? RoutingOutcomeType { get; set; }
+    public Guid? AssignedDoctorId { get; set; }
+    public string? AssignedDoctorName { get; set; }
+    public IReadOnlyList<string> RecommendedLabs { get; set; } = Array.Empty<string>();
+    public Guid? ConsultationSessionId { get; set; }
+}
+
+public sealed class RoutingDecisionSummaryDto
+{
+    public Guid DecisionId { get; set; }
+    public Guid PatientId { get; set; }
+    public string OutcomeType { get; set; } = string.Empty;
+    public string? Specialist { get; set; }
+    public Guid? AssignedDoctorId { get; set; }
+    public string? AssignedDoctorName { get; set; }
+    public IReadOnlyList<string> RecommendedLabs { get; set; } = Array.Empty<string>();
+    public string PatientMessage { get; set; } = string.Empty;
+    /// <summary>Сессия консультации, созданная routing (если врач найден).</summary>
+    public Guid? ConsultationSessionId { get; set; }
 }
 
 public sealed class SendTriageMessageRequest
@@ -68,6 +99,12 @@ public sealed class LlmTriageResultDto
     public string RecommendedAction { get; set; } = string.Empty;
     public IReadOnlyList<string> AdditionalDataNeeded { get; set; } = Array.Empty<string>();
     public bool EmergencyWarning { get; set; }
+
+    /// <summary>Анамнез достаточный, можно предложить завершить триаж.</summary>
+    public bool ReadyToComplete { get; set; }
+
+    /// <summary>Текст для пациента: почему можно завершать / призыв нажать «Завершить».</summary>
+    public string? CompleteSuggestion { get; set; }
 }
 
 public sealed class HypothesisDto

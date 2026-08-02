@@ -41,7 +41,15 @@ public sealed class MedicalRecordEventClient : IMedicalRecordEventClient
 
         var response = await _http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            _logger.LogWarning("Medical record append failed for patient {PatientId}: {Status}", patientId, response.StatusCode);
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Medical record append failed for patient {PatientId} event {EventType}: {Status} {Body}",
+                patientId,
+                eventType,
+                response.StatusCode,
+                body);
+        }
     }
 
     public async Task GrantDoctorAccessAsync(Guid patientId, Guid doctorId, CancellationToken cancellationToken = default)

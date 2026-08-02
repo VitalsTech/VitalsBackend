@@ -138,5 +138,15 @@ namespace UserService.API.Controllers
                 return NotFound();
             return Ok(doctor);
         }
+
+        /// <summary>
+        /// PublicId ∪ profile ids for a user, accepting either PublicId or ProfileId as input.
+        /// </summary>
+        [HttpGet("users/{id:guid}/identity-ids")]
+        public async Task<ActionResult<object>> ResolveIdentityIds(Guid id)
+        {
+            var identityIds = await _multiProfileUserService.ResolveIdentityIdsAsync(id);
+            return Ok(new { identityIds });
+        }
     }
 }

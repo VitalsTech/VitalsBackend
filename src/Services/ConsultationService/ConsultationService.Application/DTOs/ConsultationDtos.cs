@@ -55,6 +55,14 @@ public sealed class ConsultationSessionResponse
     public int PatientUnreadCount { get; set; }
     public int DoctorUnreadCount { get; set; }
     public string? VideoRoomId { get; set; }
+
+    /// <summary>Протокол приёма — заполняется после POST .../complete.</summary>
+    public CompleteConsultationRequest? Protocol { get; set; }
+
+    public string? ProtocolSignature { get; set; }
+
+    /// <summary>true — врач отправил протокол, консультация закрыта.</summary>
+    public bool HasProtocol { get; set; }
 }
 
 public sealed class MyConsultationsResponse

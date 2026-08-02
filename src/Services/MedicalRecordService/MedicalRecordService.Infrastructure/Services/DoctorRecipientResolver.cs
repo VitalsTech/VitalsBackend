@@ -8,15 +8,18 @@ public sealed class DoctorRecipientResolver : IDoctorRecipientResolver
 {
     private readonly IAccessGrantRepository _grants;
     private readonly IConsultationDoctorClient _consultation;
+    private readonly IUserIdentityClient _identities;
     private readonly ILogger<DoctorRecipientResolver> _logger;
 
     public DoctorRecipientResolver(
         IAccessGrantRepository grants,
         IConsultationDoctorClient consultation,
+        IUserIdentityClient identities,
         ILogger<DoctorRecipientResolver> logger)
     {
         _grants = grants;
         _consultation = consultation;
+        _identities = identities;
         _logger = logger;
     }
 
@@ -28,8 +31,32 @@ public sealed class DoctorRecipientResolver : IDoctorRecipientResolver
         if (doctorIdentityIds.Count == 0)
             return false;
 
-        var recipients = await ResolveDoctorIdsCoreAsync(patientId, cancellationToken).ConfigureAwait(false);
-        return recipients.Any(id => doctorIdentityIds.Contains(id));
+        var patientIds = await _identities.ResolveIdentityIdsAsync(patientId, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var pid in patientIds)
+        {
+            var grants = await _grants.GetActiveDoctorGrantsForPatientAsync(pid, cancellationToken)
+                .ConfigureAwait(false);
+            if (grants.Any(g => doctorIdentityIds.Contains(g.GranteeId)))
+                return true;
+        }
+
+        if (await _consultation
+                .DoctorHasSessionWithPatientAsync(doctorIdentityIds, patientIds, cancellationToken)
+                .ConfigureAwait(false))
+            return true;
+
+        // Fallback: latest consultation doctor for any patient alias
+        foreach (var pid in patientIds)
+        {
+            var latestDoctor = await _consultation.GetLatestDoctorIdAsync(pid, cancellationToken)
+                .ConfigureAwait(false);
+            if (latestDoctor is { } doctorId && doctorIdentityIds.Contains(doctorId))
+                return true;
+        }
+
+        return false;
     }
 
     public async Task<IReadOnlyList<Guid>> ResolveDoctorIdsAsync(
@@ -61,16 +88,21 @@ public sealed class DoctorRecipientResolver : IDoctorRecipientResolver
         CancellationToken cancellationToken)
     {
         var ids = new HashSet<Guid>();
-
-        var grants = await _grants.GetActiveDoctorGrantsForPatientAsync(patientId, cancellationToken)
+        var patientIds = await _identities.ResolveIdentityIdsAsync(patientId, cancellationToken)
             .ConfigureAwait(false);
-        foreach (var grant in grants)
-            ids.Add(grant.GranteeId);
 
-        var latestDoctor = await _consultation.GetLatestDoctorIdAsync(patientId, cancellationToken)
-            .ConfigureAwait(false);
-        if (latestDoctor.HasValue)
-            ids.Add(latestDoctor.Value);
+        foreach (var pid in patientIds)
+        {
+            var grants = await _grants.GetActiveDoctorGrantsForPatientAsync(pid, cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var grant in grants)
+                ids.Add(grant.GranteeId);
+
+            var latestDoctor = await _consultation.GetLatestDoctorIdAsync(pid, cancellationToken)
+                .ConfigureAwait(false);
+            if (latestDoctor.HasValue)
+                ids.Add(latestDoctor.Value);
+        }
 
         return ids.ToList();
     }

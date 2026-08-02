@@ -1,188 +1,282 @@
-# ТЗ для фронтенда (VitalsWeb)
+# ТЗ фронтенда — MVP Vitals (полный юзерфлоу)
 
-Задачи из списка Dmitri, которые **не входят в бэкенд** или требуют доработки UI поверх уже готовых API.
+Цель: закрыть путь **регистрация → триаж → маршрут/врач → консультация → рецепт/анализы** на готовых API Gateway (`/api/v1/*`).
 
----
-
-## 1. «О враче» — пустой блок (скриншот)
-
-**Бэкенд (готово):** `PATCH /api/v1/doctors/me/profile` — поля `biography`, `specialization`, `academicDegree`.  
-`GET /api/v1/doctors/{id}` возвращает `profiles[].data.biography`.
-
-**Фронтенд:**
-- На странице профиля врача (`DoctorProfile`) — форма редактирования «О враче» (textarea), сохранение через PATCH.
-- На карточке пациента (`DoctorDetail`, сайдбар чата) — показывать `bio` / `biography`; если пусто — placeholder «Информация уточняется», но блок не скрывать.
-- При регистрации врача — опциональное поле «О себе» → `doctorProfile.biography`.
-- Не скрывать секцию «О враче» при `biography === null`.
+Базовый URL: `GATEWAY` (локально обычно `http://localhost:5080`).  
+JWT: `Authorization: Bearer …`. Роль в токене: `Patient` / `Doctor` (`switch-profile` при необходимости).
 
 ---
 
-## 2. Уведомления
+## 0. Критерий готовности MVP
 
-**Бэкенд (готово):** mood/triage pipeline, категории `mood`/`triage` в preferences, поле `category` в history.
+Пациент может:
 
-**Фронтенд:**
-- Фильтры на странице уведомлений врача: `mood`, `triage`, `messages`, … — по полю `category`.
-- Маппинг `title`/`message` из `subject`/`body` (уже частично есть).
-- Deep link `/doctor/patients/{patientId}` из payload / текста.
-- Badge непрочитанных — **пока нет API read/unread**; временно считать все доставленные как новые или скрыть badge до появления `PATCH .../read`.
+1. Зарегистрироваться / войти.
+2. Пройти триаж (mock LLM ок) и увидеть маршрут / назначенного врача / анализы.
+3. Открыть чат или записаться на слот.
+4. Получить протокол после complete врача.
+5. Увидеть **реальный рецепт** (список + инструкции/QR) и **направления на анализы**.
 
----
-
-## 3. Консультации и направления (анализы, маршрут)
-
-**Бэкенд (готово):**  
-- `GET /api/v1/routing/decisions/{id}`  
-- `GET /api/v1/routing/patients/{patientId}/active-route`  
-- Complete consultation с `labOrders[]` в протоколе.
-
-**Фронтенд:**
-- Экран «Мой путь» / карточка пациента — читать `active-route` и показывать шаги (анализы → консультация → …).
-- При завершении консультации врачом — UI для `labOrders` (список направлений на анализы).
-- Связать triage → routing → consultation в UX (не только medical history).
-- Отображать `recommendedLabs` из routing decision.
+Врач может: календарь, чат, complete с диагнозом / `labOrders` / `prescriptions`, профиль «О враче».
 
 ---
 
-## 4. Рецепты в документы
+## 1. Happy path (обязательный сценарий)
 
-**Бэкенд (готово):** при подписании рецепта — события `PrescriptionIssued` + `DocumentUploaded` в медкарте; `GET .../prescriptions/{id}/instructions`.
+```mermaid
+sequenceDiagram
+  participant P as Patient UI
+  participant G as Gateway
+  participant D as Doctor UI
 
-**Фронтенд:**
-- Раздел «Документы» пациента/врача — фильтр history/attachments: `DocumentUploaded`, `PrescriptionIssued`.
-- Карточка документа «Рецепт» со ссылкой на `GET /api/v1/prescriptions/{id}/instructions`.
-- `GET /api/v1/medical-records/patients/{id}/attachments` — список вложений (gateway добавлен).
+  P->>G: POST /auth/register|login
+  P->>G: POST /triage/sessions + messages + complete
+  Note over P,G: В ответе complete: routingDecisionId, assignedDoctorId, consultationSessionId?, recommendedLabs
+  P->>G: GET /routing/patients/{id}/active-route
+  P->>G: GET /routing/decisions/{currentDecisionId}
+  alt есть consultationSessionId
+    P->>G: join + messages по sessionId
+  else нет врача / свой выбор
+    P->>G: GET /doctors + schedule + book ИЛИ POST /consultations
+  end
+  D->>G: GET /consultations/mine + join + messages
+  D->>G: POST /consultations/{id}/complete { protocol }
+  P->>G: GET consultation + prescriptions/patients + lab-orders/patients
+```
 
----
+### Шаги и API
 
-## 5. Сообщения чата — цвета, время, прочитано
-
-**Бэкенд (готово):**
-- `GET /api/v1/consultations/mine?includeCompleted=false&limit=50` — список консультаций текущего
-  пользователя. У пациента здесь и свободный чат с врачом (`isScheduled: false`), и записи через
-  `book` (`isScheduled: true`, есть `scheduledAt` / `scheduledSlotId`).
-- Вход в конкретную консультацию: `GET /api/v1/consultations/{sessionId}`, затем
-  `POST .../join`, `GET .../messages` — **уже работало**; не хватало только списка, из которого
-  фронт берёт `sessionId`.
-- `GET /api/v1/consultations/active?patientId=&doctorId=` — один «свободный» активный чат пары
-  (не замена списку записей).
-- `sentAt`, `readAt` в DTO сообщений.
-- `GET .../messages?markAsRead=true` — помечает входящие прочитанными.  
-- `POST .../messages/read` — явная отметка.  
-- SignalR event `messagesRead`.
-
-**Фронтенд:**
-- Экран пациента «Мои консультации» / раздел в чатах: `GET /api/v1/consultations/mine`.
-  Разделять: запланированные (`isScheduled === true`, показать `scheduledAt`) и обычные чаты.
-  Клик → маршрут на `/consultations/{sessionId}` (join + messages), **не** на `active` с врачом.
-- После `book` — сохранить `sessionId` из ответа и сразу открыть/показать карточку записи.
-- Свои сообщения — один стиль (например справа, акцентный фон); чужие — другой (слева, нейтральный).
-- Показывать время `sentAt` (локаль пользователя).
-- Статус «прочитано» — если `readAt != null` у исходящих; подпись «доставлено» / «прочитано».
-- Подписка на `messagesRead` в SignalR hub — обновлять `readAt` у сообщений собеседника.
-- При открытии чата — polling/`GET messages?markAsRead=true`.
-
----
-
-## 6. Календарь врача
-
-**Бэкенд (готово):**  
-- `POST /api/v1/consultations/book { doctorId, slotId, consultationType, urgencyLevel }` — запись пациента
-  на слот: резервирует слот и создаёт консультацию на его время, возвращает `sessionId` и время приёма.
-  409 — слот успели занять (нужно перезагрузить расписание), 404 — слот не найден.
-  **Важно:** старый `POST /api/v1/consultations` слот не занимает и создаёт консультацию «на сейчас» —
-  для записи по расписанию использовать только `book`.
-- `GET /api/v1/doctors/me/calendar?from=&days=` — календарь с деталями занятости: `isBooked`, `status`,
-  пациент (`fullName`, `age`, `sex`), `triage` (уровень срочности, жалобы, гипотезы, рекомендация),
-  `anamnesis` (диагнозы, препараты, аллергии, анализы, последний показатель).
-  Консультации вне сетки приёма — в `unscheduledConsultations`. Контракт: `docs/ApiGateway.md`.
-- `GET /api/v1/doctors/{id}/schedule` — публичное расписание для записи пациента (без данных пациентов)
-- `POST /api/v1/doctors/me/schedule/slots` — создать/обновить слот (забронированный слот менять нельзя — 400)  
-- `DELETE /api/v1/doctors/me/schedule/slots/{slotId}` (забронированный слот удалить нельзя — 400)
-
-**Фронтенд:**
-- Страница календаря врача: недельный/дневной вид слотов на основе `me/calendar`.
-- Форма: дата, время начала/конца, онлайн/очно, доступен/заблокирован.
-- CRUD через новые endpoints. Время слота отправлять в UTC с суффиксом `Z`.
-- Цвет ячейки по `status`: `booked` / `available` / `closed`; бейдж срочности по `triage.urgencyLabel`.
-- Клик по занятой ячейке — панель деталей: пациент, жалобы, гипотезы, анамнез, кнопка перехода в чат
-  консультации по `consultation.sessionId`. Поля `triage`/`anamnesis` могут быть `null` — скрывать блок.
-- Секция «Вне расписания» для `unscheduledConsultations` — это незакрытые консультации без брони
-  (созданы триажем или записаны до появления бронирования).
-- Экран записи пациента: слоты из `GET /api/v1/doctors/{id}/schedule` c `isAvailable: true`,
-  запись через `POST /api/v1/consultations/book`, на 409 — перезагрузить расписание и показать
-  «слот только что заняли».
+| # | Действие | Метод | Путь | Кто | Что важно |
+|---|----------|-------|------|-----|-----------|
+| 1 | Регистрация | POST | `/api/v1/auth/register` | anon | `patientProfile` и/или `doctorProfile` (`specialization`: лучше `therapist` / `терапевт`) |
+| 2 | Логин | POST | `/api/v1/auth/login` | anon | Сохранить access/refresh; при двух профилях — `POST /auth/switch-profile` |
+| 3 | Старт триажа | POST | `/api/v1/triage/sessions` | Patient | body: `{ patientId }` |
+| 4 | Сообщения | POST | `/api/v1/triage/sessions/{id}/messages` | Patient | `{ message }` → смотреть `readyToComplete` |
+| 5 | Завершить триаж | POST | `/api/v1/triage/sessions/{id}/complete` | Patient | CTA когда `readyToComplete: true` (см. §2) |
+| 6 | Мой путь | GET | `/api/v1/routing/patients/{patientId}/active-route` | JWT | `currentDecisionId`, steps |
+| 7 | Решение | GET | `/api/v1/routing/decisions/{decisionId}` | JWT | `recommendedLabs`, `assignedDoctorId`, `outcomeType` |
+| 8a | Авто-чат | — | из `consultationSessionId` после complete | Patient | `POST .../join`, messages, SignalR |
+| 8b | Выбор врача | GET | `/api/v1/doctors?specialization=` | anon/JWT | карточки |
+| 8c | Слоты | GET | `/api/v1/doctors/{id}/schedule` | anon/JWT | `isAvailable: true` |
+| 8d | Запись | POST | `/api/v1/consultations/book` | **Patient** | `{ doctorId, slotId, consultationType, urgencyLevel }` — **не** сырой `POST /consultations` для слота |
+| 8e | Свободный чат | POST | `/api/v1/consultations` | JWT | open/reuse; для «сейчас» |
+| 9 | Список | GET | `/api/v1/consultations/mine` | JWT | `isScheduled`, `scheduledAt` |
+| 10 | Чат | GET/POST | `.../messages`, hub | оба | `sentAt`/`readAt`, `markAsRead` |
+| 11 | Complete | POST | `/api/v1/consultations/{id}/complete` | **Doctor** | протокол (диагноз, `labOrders[]`, `prescriptions[]`) |
+| 12 | Протокол | GET | `/api/v1/consultations/{id}` | оба | `protocol`, `hasProtocol`, статус `Completed` |
+| 13 | Рецепты | GET | `/api/v1/prescriptions/patients/{patientId}` | JWT | после complete с `prescriptions[]` — **Signed** |
+| 14 | Инструкции/QR | GET | `/api/v1/prescriptions/{id}/instructions` и `/qr` | JWT | для пациента |
+| 15 | Анализы | GET | `/api/v1/lab-orders/patients/{patientId}` | JWT | из triage LabsBeforeConsultation и/или complete |
 
 ---
 
-## 7. Ошибки на русском
+## 2. Триаж-чат: когда показывать «Завершить»
 
-**Бэкенд (готово):** Gateway локализует типовые ошибки 4xx/5xx в JSON `{ error, errors }`.
+В ответе на `POST .../messages` (и `GET .../sessions/{id}`):
 
-**Фронтенд:**
-- Показывать пользователю `error` / первое сообщение из `errors`, не raw English stack.
-- Toast/alert с текстом из ответа API.
-- Fallback: «Не удалось выполнить операцию».
+```json
+{
+  "readyToComplete": true,
+  "completeSuggestion": "Ключевых деталей достаточно. Можете нажать «Завершить триаж»…",
+  "latestAssessment": {
+    "llmResult": {
+      "readyToComplete": true,
+      "completeSuggestion": "...",
+      "urgencyLevel": 3,
+      "recommendedAction": "..."
+    }
+  }
+}
+```
+
+**Фронт:** если `readyToComplete === true` — кнопка «Завершить триаж» → `POST .../complete`.  
+Пациент может завершить и раньше (кнопка всегда доступна), но акцент/primary — когда ИИ предлагает.
+
+## 2b. Контракт после `POST .../triage/.../complete`
+
+Бэкенд (локально без Kafka) **синхронно** вызывает Routing. В ответе сессии дополнительно:
+
+```json
+{
+  "sessionId": "...",
+  "status": "Completed",
+  "routingDecisionId": "...",
+  "routingOutcomeType": "Consultation",
+  "assignedDoctorId": "...",
+  "assignedDoctorName": "...",
+  "recommendedLabs": [],
+  "consultationSessionId": "...",
+  "recommendation": "...",
+  "recommendedSpecialization": "therapist"
+}
+```
+
+**Фронт обязан:**
+
+1. Если есть `consultationSessionId` — сразу вести в чат этой сессии (или показать CTA «Открыть консультацию»).
+2. Иначе если есть `assignedDoctorId` — карточка врача + кнопки «Написать» (`POST /consultations`) / «Записаться» (schedule → book).
+3. Если `recommendedLabs.length > 0` — блок «Сдайте анализы» + `GET lab-orders/patients/{id}` и/или decision.
+4. Всегда обновить «Мой путь»: `active-route` → `currentDecisionId` → `getDecision`.
+5. Fallback текста шага: `Назначены анализы: …` в `steps[].description`.
+
+При Kafka-only (Docker) поля routing в complete могут быть пустыми — тогда сразу poll `active-route` (1–2 с).
 
 ---
 
-## 8. Favicon и title страниц
+## 3. Complete консультации (врач)
 
-**Только фронтенд:**
-- `index.html`: `<link rel="icon" …>`, default `<title>Vitals</title>`.
-- React Router / layout: `document.title` per route, например «Консультации · Vitals», «Пациент Анна · Vitals».
+```json
+POST /api/v1/consultations/{sessionId}/complete
+{
+  "complaints": "...",
+  "anamnesis": "...",
+  "examinationNotes": "...",
+  "preliminaryDiagnosisIcd10": "J06.9",
+  "preliminaryDiagnosisText": "ОРВИ",
+  "recommendations": "...",
+  "nextVisitDate": null,
+  "labOrders": ["ОАК", "СРБ"],
+  "prescriptions": ["Амоксициллин 500 мг — 3 р/день 7 дней"]
+}
+```
 
----
+**Что делает бэкенд сам (фронту не дублировать):**
 
-## 9. Логотип на страницах
+- Статус → `Completed`, `protocol` в ответе.
+- `labOrders[]` → `POST` lab-orders + шаг в active-route + merge в `recommendedLabs`.
+- `prescriptions[]` → создание **и подпись** рецепта в PrescriptionService (события в медкарте).
+- Диагноз → `DiagnosisConfirmed` в MR.
 
-**Только фронтенд:**
-- Компонент `Logo` в header/sidebar (patient + doctor layouts).
-- Единый asset в `public/` или `src/assets`.
-- Согласовать с брендом Vitals (из Figma при наличии).
+Повторный `/complete` на Completed — **ок** (обновление протокола). Не показывать как фатал.
 
----
+**После complete пациент:**
 
-## 10. Дополнить Figma
+- `GET /consultations/{id}` — протокол.
+- `GET /prescriptions/patients/{patientId}` — рецепты; карточка → instructions / qr.
+- `GET /lab-orders/patients/{patientId}` — направления.
+- `GET /medical-records/patients/{id}/state|history|attachments` — агрегаты/документы.
 
-**Дизайн / фронт:**
-- Экраны: уведомления (фильтры mood/triage), календарь врача, документы с рецептами, чат (read receipts).
-- Пустые состояния: «О враче», нет уведомлений, нет документов.
-- Передать ссылки на макеты в README портала.
-
----
-
-## Приоритет внедрения (фронт)
-
-| P | Задача | Зависимость от API |
-|---|--------|-------------------|
-| 1 | «О враче» — форма + отображение | PATCH profile |
-| 1 | Чат — цвета, время, readAt | messages + SignalR |
-| 2 | Уведомления — фильтр category | history.category |
-| 2 | Документы — рецепты из history | PrescriptionIssued / DocumentUploaded |
-| 3 | Маршрут / анализы | routing active-route |
-| 3 | Календарь врача | schedule CRUD |
-| 4 | Favicon, title, logo | — |
-| 4 | Figma | — |
+Опционально врач может создать рецепт отдельно: `POST /prescriptions` → `sign` (если нужен полноценный ATC/форма без строк протокола).
 
 ---
 
-## Контракты для проверки (curl через gateway)
+## 4. Экраны MVP (что сверстать)
+
+### Пациент
+
+| Экран | Данные |
+|-------|--------|
+| Логин / регистрация | auth |
+| Триаж-чат | triage sessions/messages/complete |
+| Результат триажа / «Мой путь» | complete fields + active-route + decision |
+| Список врачей | `GET /doctors` |
+| Карточка врача | `GET /doctors/{id}`, biography, schedule |
+| Запись на слот | schedule → book |
+| Мои консультации | `GET /consultations/mine` |
+| Чат консультации | join, messages, SignalR hub |
+| Документы / рецепты | prescriptions + MR attachments/history |
+| Анализы | lab-orders patients |
+| Медкарта (кратко) | state |
+
+### Врач
+
+| Экран | Данные |
+|-------|--------|
+| Профиль «О враче» | `PATCH /doctors/me/profile` |
+| Календарь | `GET /doctors/me/calendar?from=&days=` + CRUD slots |
+| Список консультаций | `mine` |
+| Чат + протокол | complete form: диагноз, анализы (chips/textarea→массив), рецепты (строки) |
+| Пациент (сайдбар) | triage sessions, MR state, calendar cell details |
+
+### Общее
+
+- Ошибки: показывать `error` / `errors[]` из Gateway (RU).
+- Title/favicon/logo — фронт-only.
+- Уведомления: `GET /notifications/history` + фильтр `category` (nice-to-have; badge/read API нет).
+
+---
+
+## 5. Важные правила (чтобы не сломать флоу)
+
+1. **Запись на время** — только `POST /consultations/book` + `slotId`.  
+   `POST /consultations` = свободный чат «сейчас», слот не бронирует.
+2. Список записей пациента — **`/consultations/mine`**, не только `/active`.
+3. После book — сохранить `sessionId` из ответа.
+4. Рецепт пациенту — из `GET /prescriptions/patients/...`, не из текста протокола.
+5. Анализы — `lab-orders`, не только строки в протоколе.
+6. Время слотов — UTC с `Z`.
+7. Специализация врача при регистрации: `therapist` или `терапевт` (routing ищет по алиасам).
+8. Для демо нужен **хотя бы один активный Doctor** с подходящей специализацией — иначе `assignedDoctorId` пустой, пациент выбирает вручную из каталога.
+
+---
+
+## 6. UI-долги (не блокируют API, но нужны для продукта)
+
+| P | Задача |
+|---|--------|
+| P0 | Экраны §1 happy path end-to-end |
+| P0 | После triage complete — ветвление по `consultationSessionId` / `assignedDoctorId` / labs |
+| P0 | Complete-форма врача → массивы `labOrders` / `prescriptions` |
+| P0 | Экран рецепта: instructions + QR |
+| P1 | «О враче» форма + отображение biography |
+| P1 | Чат: свои/чужие, `sentAt`, `readAt`, SignalR `messagesRead` |
+| P1 | Календарь врача (`me/calendar`) |
+| P1 | Документы из MR `DocumentUploaded` / `PrescriptionIssued` |
+| P2 | Уведомления + фильтр category |
+| P2 | Favicon, title, logo, Figma |
+
+---
+
+## 7. Smoke curl (локальный MVP)
 
 ```bash
-# Биография врача
-curl -X PATCH -H "Authorization: Bearer $DOCTOR" -H "Content-Type: application/json" \
-  "$GATEWAY/api/v1/doctors/me/profile" -d '{"biography":"Опыт 10 лет…"}'
+# 1) Пациент
+curl -s -X POST "$GATEWAY/api/v1/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"...","password":"..."}'
 
-# Прочитать сообщения
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  "$GATEWAY/api/v1/consultations/$SESSION/messages/read"
+# 2) Триаж
+curl -s -X POST "$GATEWAY/api/v1/triage/sessions" -H "Authorization: Bearer $PATIENT" \
+  -H 'Content-Type: application/json' -d "{\"patientId\":\"$PATIENT_ID\"}"
+curl -s -X POST "$GATEWAY/api/v1/triage/sessions/$TRIAGE/messages" -H "Authorization: Bearer $PATIENT" \
+  -H 'Content-Type: application/json' -d '{"message":"температура 38.2, болит горло 3 дня"}'
+curl -s -X POST "$GATEWAY/api/v1/triage/sessions/$TRIAGE/complete" -H "Authorization: Bearer $PATIENT"
+# → routingDecisionId, assignedDoctorId, consultationSessionId?
 
-# Маршрут пациента
-curl -H "Authorization: Bearer $TOKEN" \
-  "$GATEWAY/api/v1/routing/patients/$PATIENT_ID/active-route"
+# 3) Маршрут
+curl -s "$GATEWAY/api/v1/routing/patients/$PATIENT_ID/active-route" -H "Authorization: Bearer $PATIENT"
 
-# Документы
-curl -H "Authorization: Bearer $TOKEN" \
-  "$GATEWAY/api/v1/medical-records/patients/$PATIENT_ID/attachments"
+# 4) Чат / book (если session уже есть — join)
+curl -s -X POST "$GATEWAY/api/v1/consultations/$SESSION/join" -H "Authorization: Bearer $PATIENT"
+
+# 5) Врач complete
+curl -s -X POST "$GATEWAY/api/v1/consultations/$SESSION/complete" -H "Authorization: Bearer $DOCTOR" \
+  -H 'Content-Type: application/json' -d '{
+    "complaints":"боль в горле","anamnesis":"-","examinationNotes":"-",
+    "preliminaryDiagnosisIcd10":"J06.9","preliminaryDiagnosisText":"ОРВИ",
+    "recommendations":"покой","labOrders":["ОАК"],
+    "prescriptions":["Парацетамол 500 мг — при температуре"]
+  }'
+
+# 6) Пациент: рецепты и анализы
+curl -s "$GATEWAY/api/v1/prescriptions/patients/$PATIENT_ID" -H "Authorization: Bearer $PATIENT"
+curl -s "$GATEWAY/api/v1/lab-orders/patients/$PATIENT_ID" -H "Authorization: Bearer $PATIENT"
 ```
+
+---
+
+## 8. Вне MVP (не ждать от бэка для демо)
+
+- Реальная аптека / ЕГИСЗ / ESIA / оплата.
+- Push/SMS (Integration — log-stub); in-app history можно показать.
+- Видео SFU (stub).
+- Badge непрочитанных уведомлений без `PATCH .../read`.
+- Авто-создание lab-orders без назначенного врача (нужен doctorId).
+
+---
+
+## 9. Ссылки на контракты бэка
+
+- Gateway overview: `docs/ApiGateway.md`
+- Routing: `docs/RoutingService.md`
+- Prescriptions + lab-orders: `docs/PrescriptionService.md`
+- Consultations / book / calendar: `docs/ApiGateway.md`, `docs/ConsultationService.md`

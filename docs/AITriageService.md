@@ -9,9 +9,11 @@
 | ---------------- | ----------------------------------------------------- |
 | Парсер симптомов | Rule-based (`RuleBasedSymptomParser`)                 |
 | NER              | **Заглушка** (`StubNerService`) + коды МКБ-10         |
-| LLM              | **Заглушка** (`StubLlmTriageService`)                 |
+| LLM              | **YandexGPT 5.1** (`YandexGptLlmTriageService`)       |
 | Medical Record   | HTTP → `internal/medical-records/patients/{id}/state` |
-| Kafka            | **Заглушка** → топик `triage.completed`               |
+| Kafka / HTTP     | `triage.completed` или sync routing HTTP              |
+
+Ключ API: `appsettings.Secrets.json` / env `MlServices__ApiKey` / `.env` → `YANDEX_API_KEY` (**не коммитить**).
 
 
 ## API
@@ -21,7 +23,7 @@
 | ----- | ------------------------------------ | ------------------------------------- |
 | POST  | `/api/triage/sessions`               | Создать сессию триажа                 |
 | POST  | `/api/triage/sessions/{id}/messages` | Сообщение пациента → ответ ассистента |
-| POST  | `/api/triage/sessions/{id}/complete` | **Завершить триаж** (mock-маршрут, если нет оценки LLM) |
+| POST  | `/api/triage/sessions/{id}/complete` | **Завершить триаж** → YandexGPT (если нужно) + routing |
 | GET   | `/api/triage/sessions/{id}`          | Сессия + последняя оценка (patient self / doctor with access) |
 | GET   | `/api/triage/patients/{patientId}/sessions?limit=5` | Список сессий пациента для врача (403 без grant/консультации) |
 
@@ -37,27 +39,20 @@ Gateway: `GET /api/v1/triage/patients/{patientId}/sessions`.
 1. Rule-based парсер извлекает симптомы, локализацию, длительность и т.д.
 2. NER-заглушка нормализует термины (МКБ-10).
 3. Загружается контекст из Medical Record Service.
-4. LLM-заглушка возвращает гипотезы, urgency (1–5), следующий вопрос, рекомендацию.
-5. Публикуется `triage.completed` (лог).
-6. Ответ пациенту с disclaimer.
+4. YandexGPT возвращает JSON: гипотезы, urgency (1–5), следующий вопрос, рекомендацию.
+5. Ответ пациенту с disclaimer (routing — на `complete`).
 
-## Завершение триажа (mock)
+## Завершение триажа
 
-`POST /api/v1/triage/sessions/{sessionId}/complete` (через gateway) или `POST /api/triage/sessions/{id}/complete` напрямую.
+`POST /api/v1/triage/sessions/{sessionId}/complete`
 
-Если пациент не успел получить оценку LLM (мало сообщений), сервис подставляет **mock-данные**:
+1. Берётся последняя оценка YandexGPT из диалога; если сообщений не было — финальный вызов модели по истории.
+2. Публикация / HTTP в Routing → `active-route`, `routingDecisionId`, `assignedDoctorId` в ответе.
+3. Событие в медкарту.
 
-| Поле | Mock-значение | Куда попадает |
-| ---- | ------------- | ------------- |
-| `urgencyLevel` | `2` (плановая) | Ответ API `latestUrgencyLevel`, поле `urgency` = `routine` |
-| `recommendedSpecialization` | `"Терапевт"` | Ответ API |
-| `recommendation` / `recommendationText` | `"Запись к терапевту в течение 3 дней…"` | Ответ API, экран «Результат триажа» |
-| `canBeRemote` | `true` при urgency ≤ 3 | Ответ API |
-| Событие медкарты | `AiTriageUrgencyDetermined` | `POST internal/medical-records/patients/{patientId}/events` |
-| Payload события | `{ sessionId, urgencyLevel, recommendedSpecialization, recommendation, canBeRemote, route[] }` | Страница «Мой путь» + карточка врача |
-| Kafka | `triage.completed` + (через Medical Records) `patient.triage.completed` врачам | Routing + NotificationService |
+Mock-оценка больше не используется при `MlServices:UseStubModels=false`.
 
-`patientId` в сессии триажа — **ProfileId** пациента (из JWT claim `profile_id`), тот же id, что использует фронтенд в `useAuth().patientId`.
+`patientId` в сессии триажа — id пациента из JWT (тот же, что на фронте в `useAuth().patientId`).
 
 ## Пример
 

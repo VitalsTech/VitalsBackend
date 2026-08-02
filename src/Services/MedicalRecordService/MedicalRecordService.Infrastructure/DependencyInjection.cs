@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.Configure<MedicalRecordOptions>(configuration.GetSection(MedicalRecordOptions.SectionName));
         services.Configure<KafkaOptions>(configuration.GetSection(KafkaOptions.SectionName));
         services.Configure<ConsultationServiceOptions>(configuration.GetSection(ConsultationServiceOptions.SectionName));
+        services.Configure<UserServiceOptions>(configuration.GetSection(UserServiceOptions.SectionName));
         services.AddVitalsKafka(configuration, options =>
         {
             var kafka = configuration.GetSection(KafkaOptions.SectionName).Get<KafkaOptions>() ?? new KafkaOptions();
@@ -42,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IPatientAttachmentRepository, PatientAttachmentRepository>();
 
         services.AddHttpClient<IConsultationDoctorClient, ConsultationDoctorClient>();
+        services.AddHttpClient<IUserIdentityClient, UserIdentityClient>();
         services.AddScoped<IDoctorRecipientResolver, DoctorRecipientResolver>();
 
         services.AddScoped<ProjectionUpdater>();

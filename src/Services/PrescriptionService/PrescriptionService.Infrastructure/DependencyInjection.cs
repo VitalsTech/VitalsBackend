@@ -40,6 +40,8 @@ public static class DependencyInjection
 
         services.AddScoped<IPrescriptionRepository, PrescriptionRepository>();
         services.AddScoped<IPrescriptionService, PrescriptionAppService>();
+        services.AddScoped<ILabOrderRepository, LabOrderRepository>();
+        services.AddScoped<ILabOrderService, LabOrderAppService>();
         services.AddSingleton<IPrescriptionValidationEngine, RuleBasedPrescriptionValidationEngine>();
         services.AddSingleton<IPrescriptionQrService, PrescriptionQrService>();
         services.AddSingleton<IPatientInstructionGenerator, TemplatePatientInstructionGenerator>();

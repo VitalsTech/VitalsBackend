@@ -12,6 +12,9 @@ public sealed class PrescriptionDbContext : DbContext
     public DbSet<Prescription> Prescriptions => Set<Prescription>();
     public DbSet<PrescriptionMedicationItem> PrescriptionMedications => Set<PrescriptionMedicationItem>();
     public DbSet<PrescriptionStatusHistory> PrescriptionStatusHistory => Set<PrescriptionStatusHistory>();
+    public DbSet<LabOrder> LabOrders => Set<LabOrder>();
+    public DbSet<LabOrderItem> LabOrderItems => Set<LabOrderItem>();
+    public DbSet<LabOrderStatusHistory> LabOrderStatusHistory => Set<LabOrderStatusHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,6 +50,47 @@ public sealed class PrescriptionDbContext : DbContext
             entity.Property(x => x.Initiator).HasMaxLength(32);
             entity.Property(x => x.Reason).HasMaxLength(512);
             entity.HasIndex(x => x.PrescriptionId);
+        });
+
+        modelBuilder.Entity<LabOrder>(entity =>
+        {
+            entity.ToTable("lab_orders");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ClinicalIndication).HasMaxLength(512);
+            entity.Property(x => x.Priority).HasMaxLength(32);
+            entity.Property(x => x.DoctorComment).HasMaxLength(2000);
+            entity.Property(x => x.ExternalLabOrderId).HasMaxLength(128);
+            entity.Property(x => x.CancelReason).HasMaxLength(512);
+            entity.HasIndex(x => x.PatientId);
+            entity.HasIndex(x => x.DoctorId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.ConsultationId);
+            entity.HasMany(x => x.Items).WithOne(x => x.LabOrder!).HasForeignKey(x => x.LabOrderId);
+        });
+
+        modelBuilder.Entity<LabOrderItem>(entity =>
+        {
+            entity.ToTable("lab_order_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TestName).HasMaxLength(256);
+            entity.Property(x => x.TestCode).HasMaxLength(64);
+            entity.Property(x => x.SpecimenType).HasMaxLength(128);
+            entity.Property(x => x.SpecialInstructions).HasMaxLength(1000);
+            entity.Property(x => x.ResultValue).HasMaxLength(512);
+            entity.Property(x => x.ReferenceRange).HasMaxLength(256);
+            entity.Property(x => x.Unit).HasMaxLength(64);
+            entity.Property(x => x.ResultAttachmentUrl).HasMaxLength(1024);
+            entity.Property(x => x.ResultComment).HasMaxLength(2000);
+            entity.HasIndex(x => x.LabOrderId);
+        });
+
+        modelBuilder.Entity<LabOrderStatusHistory>(entity =>
+        {
+            entity.ToTable("lab_order_status_history");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Initiator).HasMaxLength(32);
+            entity.Property(x => x.Reason).HasMaxLength(512);
+            entity.HasIndex(x => x.LabOrderId);
         });
     }
 }

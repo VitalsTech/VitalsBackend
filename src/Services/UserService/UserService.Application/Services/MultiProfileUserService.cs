@@ -25,6 +25,16 @@ namespace UserService.Application.Services
         Task<UserWithProfilesDto?> GetUserByPhoneAsync(string phone);
         Task<UserWithProfilesDto?> GetUserByEmailAsync(string email);
         Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request);
+
+        /// <summary>
+        /// Resolve PublicId or ProfileId → user. Used when services store either identity.
+        /// </summary>
+        Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id);
+
+        /// <summary>
+        /// PublicId ∪ all profile ids for the user (always includes the input id).
+        /// </summary>
+        Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id);
     }
 
     public class MultiProfileUserService : IMultiProfileUserService
@@ -472,6 +482,47 @@ namespace UserService.Application.Services
             _userRepository.UpdateProfile(profile);
             await _userRepository.SaveChangesAsync();
             return await GetUserWithProfilesAsync(userPublicId);
+        }
+
+        public async Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id)
+        {
+            try
+            {
+                return await GetUserWithProfilesAsync(id);
+            }
+            catch (UserNotFoundException)
+            {
+                /* maybe ProfileId */
+            }
+
+            var roles = await _userRoleRepository.GetByProfileAsync(id);
+            var userId = roles.Select(r => r.UserId).FirstOrDefault();
+            if (userId == Guid.Empty)
+                return null;
+
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user is null)
+                return null;
+
+            return await GetUserWithProfilesAsync(user.PublicId);
+        }
+
+        public async Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id)
+        {
+            var ids = new HashSet<Guid> { id };
+            var user = await GetUserByPublicIdOrProfileIdAsync(id);
+            if (user is null)
+                return ids.ToList();
+
+            if (user.PublicId != Guid.Empty)
+                ids.Add(user.PublicId);
+            foreach (var profile in user.Profiles)
+            {
+                if (profile.ProfileId != Guid.Empty)
+                    ids.Add(profile.ProfileId);
+            }
+
+            return ids.ToList();
         }
     }
     public class PatientProfileData

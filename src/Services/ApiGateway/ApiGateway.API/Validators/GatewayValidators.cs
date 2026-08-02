@@ -100,7 +100,9 @@ public sealed class SendTriageMessageRequestDtoValidator : AbstractValidator<Sen
 {
     public SendTriageMessageRequestDtoValidator()
     {
-        RuleFor(x => x.Content).NotEmpty().MaximumLength(4000);
+        RuleFor(x => x.Text)
+            .NotEmpty().WithMessage("message обязателен.")
+            .MaximumLength(4000);
     }
 }
 
