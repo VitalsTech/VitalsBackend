@@ -78,6 +78,24 @@ public sealed class UserServiceClient : IUserServiceClient
             ?? new UserServiceRoleResponse { UserPublicId = userPublicId };
     }
 
+    public async Task SwitchActiveProfileAsync(Guid userPublicId, Guid profileId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync(
+            $"internal/users/{userPublicId}/switch-profile",
+            new { userPublicId, profileId },
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task ActivateProfileByTypeAsync(Guid userPublicId, string profileType, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync(
+            $"internal/users/{userPublicId}/switch-profile",
+            new { userPublicId, profileType },
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     private async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)

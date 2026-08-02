@@ -14,9 +14,6 @@ public static class NotificationTemplateSeeder
         var db = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<NotificationDbContext>>();
 
-        if (await db.Templates.AnyAsync())
-            return;
-
         var now = DateTime.UtcNow;
         var templates = new List<NotificationTemplate>
         {
@@ -27,8 +24,8 @@ public static class NotificationTemplateSeeder
             T("consultation.reminder.push", "Push", "Напоминание о консультации", "{doctor_name} ждёт вас через {minutes_remaining} минут.", now),
             T("consultation.reminder.sms", "Sms", null, "Vitals: консультация через {minutes_remaining} мин.", now),
             T("consultation.reminder.email", "Email", "Напоминание Vitals", "Консультация через {minutes_remaining} минут.", now),
-            T("message.new.push", "Push", "Новое сообщение", "У вас новое сообщение от врача.", now),
-            T("message.new.email", "Email", "Новые сообщения Vitals", "У вас новое сообщение в консультации.", now),
+            T("message.new.push", "Push", "Новое сообщение", "{preview}", now),
+            T("message.new.email", "Email", "Новое сообщение Vitals", "{preview}", now),
             T("prescription.issued.push", "Push", "Новый рецепт", "Врач выписал рецепт на {medication_name}.", now),
             T("prescription.issued.email", "Email", "Рецепт Vitals", "Новый рецепт доступен в личном кабинете.", now),
             T("prescription.expiring.push", "Push", "Рецепт истекает", "Рецепт на {medication_name} истекает через {days_remaining} дней.", now),
@@ -52,15 +49,33 @@ public static class NotificationTemplateSeeder
             T("emergency.required.sms", "Sms", null, "Vitals: экстренная ситуация. Свяжитесь с врачом.", now),
             T("emergency.required.voice", "Voice", null, "Vitals: экстренная ситуация. Немедленно свяжитесь с врачом.", now),
             T("triage.completed.push", "Push", "Триаж завершён", "Маршрутизация к врачу выполнена.", now),
+            T("patient.mood.updated.push", "Push", "{title}", "{message}", now),
+            T("patient.mood.updated.email", "Email", "{title}", "{message}\n\nОткрыть карточку: {deep_link}", now),
+            T("patient.triage.completed.push", "Push", "{title}", "{message}", now),
+            T("patient.triage.completed.email", "Email", "{title}", "{message}\n\nРекомендация: {recommendation}\n{deep_link}", now),
             T("system.maintenance.push", "Push", "Обслуживание", "Платформа будет недоступна {maintenance_time}.", now),
             T("system.maintenance.email", "Email", "Плановое обслуживание Vitals", "Сервис будет недоступен {maintenance_time}.", now),
             T("auto_response.push", "Push", "Ответ Vitals", "Мы подготовили ответ в базе знаний.", now),
             T("generic.system.push", "Push", "Vitals", "{message}", now)
         };
 
-        db.Templates.AddRange(templates);
+        var existingKeys = await db.Templates
+            .AsNoTracking()
+            .Where(t => t.IsActive)
+            .Select(t => t.TemplateKey + "|" + t.Channel)
+            .ToListAsync();
+
+        var existing = existingKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = templates
+            .Where(t => !existing.Contains(t.TemplateKey + "|" + t.Channel))
+            .ToList();
+
+        if (missing.Count == 0)
+            return;
+
+        db.Templates.AddRange(missing);
         await db.SaveChangesAsync();
-        logger.LogInformation("Seeded {Count} notification templates", templates.Count);
+        logger.LogInformation("Seeded {Count} notification templates (missing keys)", missing.Count);
     }
 
     private static NotificationTemplate T(string key, string channel, string? subject, string body, DateTime now) => new()

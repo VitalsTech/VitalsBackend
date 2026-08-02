@@ -3,6 +3,27 @@ using PrescriptionService.Domain.Entities;
 
 namespace PrescriptionService.Application.Interfaces;
 
+// --- Lab orders (analyses) ---
+
+public interface ILabOrderRepository
+{
+    Task<LabOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<LabOrder?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LabOrder>> GetByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+    Task SaveAsync(LabOrder order, CancellationToken cancellationToken = default);
+    Task AddStatusHistoryAsync(LabOrderStatusHistory history, CancellationToken cancellationToken = default);
+}
+
+public interface ILabOrderService
+{
+    Task<LabOrderResponse> CreateAsync(Guid doctorId, CreateLabOrderRequest request, CancellationToken cancellationToken = default);
+    Task<LabOrderResponse> GetAsync(Guid labOrderId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LabOrderResponse>> GetPatientOrdersAsync(Guid patientId, CancellationToken cancellationToken = default);
+    Task<LabOrderResponse> StartAsync(Guid labOrderId, Guid userId, StartLabOrderRequest request, CancellationToken cancellationToken = default);
+    Task<LabOrderResponse> CancelAsync(Guid labOrderId, Guid userId, string reason, CancellationToken cancellationToken = default);
+    Task<LabOrderResponse> RecordResultsAsync(Guid labOrderId, RecordLabOrderResultsRequest request, CancellationToken cancellationToken = default);
+}
+
 public interface IPrescriptionRepository
 {
     Task<Prescription?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);

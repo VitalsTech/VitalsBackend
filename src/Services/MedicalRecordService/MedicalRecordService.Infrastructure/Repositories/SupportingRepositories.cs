@@ -41,6 +41,17 @@ public sealed class AccessGrantRepository : IAccessGrantRepository
                         (x.ExpiresAt == null || x.ExpiresAt > DateTime.UtcNow))
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<AccessGrant>> GetActiveDoctorGrantsForPatientAsync(
+        Guid patientId,
+        CancellationToken cancellationToken = default) =>
+        await _db.AccessGrants
+            .AsNoTracking()
+            .Where(x => x.PatientId == patientId &&
+                        x.RevokedAt == null &&
+                        (x.ExpiresAt == null || x.ExpiresAt > DateTime.UtcNow) &&
+                        (x.GranteeType == "Doctor" || x.GranteeType == "doctor"))
+            .ToListAsync(cancellationToken);
+
     public Task<AccessGrant?> GetByIdAsync(Guid grantId, CancellationToken cancellationToken = default) =>
         _db.AccessGrants.FirstOrDefaultAsync(x => x.Id == grantId, cancellationToken);
 

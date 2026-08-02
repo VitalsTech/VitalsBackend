@@ -6,6 +6,12 @@ public sealed class MedicalRecordServiceOptions
     public string BaseUrl { get; set; } = "http://localhost:5210";
 }
 
+public sealed class RoutingServiceOptions
+{
+    public const string SectionName = "RoutingService";
+    public string BaseUrl { get; set; } = "http://localhost:5230";
+}
+
 public sealed class KafkaOptions
 {
     public const string SectionName = "Kafka";
@@ -26,9 +32,24 @@ public sealed class JwtValidationOptions
 public sealed class MlServicesOptions
 {
     public const string SectionName = "MlServices";
-    public bool UseStubModels { get; set; } = true;
+
+    /// <summary>true — heuristic StubLlm; false — YandexGPT (или Http LLM).</summary>
+    public bool UseStubModels { get; set; } = false;
+
+    /// <summary>NER пока оставляем stub (отдельный сервис не обязателен для MVP).</summary>
+    public bool UseStubNer { get; set; } = true;
+
+    /// <summary>Yandex | Http</summary>
+    public string Provider { get; set; } = "Yandex";
+
     public string? NerEndpoint { get; set; }
     public string? LlmEndpoint { get; set; }
+
+    /// <summary>Yandex API-ключ (лучше через appsettings.Secrets.json / env MlServices__ApiKey).</summary>
     public string? ApiKey { get; set; }
-    public int TimeoutSeconds { get; set; } = 30;
+
+    public string? FolderId { get; set; }
+    public string? Model { get; set; }
+    public string? ResponsesEndpoint { get; set; } = "https://ai.api.cloud.yandex.net/v1/responses";
+    public int TimeoutSeconds { get; set; } = 60;
 }

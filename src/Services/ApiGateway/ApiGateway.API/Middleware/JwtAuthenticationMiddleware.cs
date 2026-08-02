@@ -38,10 +38,29 @@ public sealed class JwtAuthenticationMiddleware
             var token = authorization["Bearer ".Length..].Trim();
             var principal = ValidateToken(token);
             if (principal is not null)
-                context.User = principal;
+                context.User = EnsureRoleClaims(principal);
         }
 
         await _next(context);
+    }
+
+    /// <summary>
+    /// Maps legacy ClaimTypes.Role URIs to short "role" claims expected by [Authorize(Roles = "...")].
+    /// </summary>
+    private static ClaimsPrincipal EnsureRoleClaims(ClaimsPrincipal principal)
+    {
+        var identity = principal.Identity as ClaimsIdentity;
+        if (identity is null)
+            return principal;
+
+        var existingRoles = identity.FindAll("role").Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var claim in principal.FindAll(ClaimTypes.Role))
+        {
+            if (existingRoles.Add(claim.Value))
+                identity.AddClaim(new Claim("role", claim.Value));
+        }
+
+        return principal;
     }
 
     private ClaimsPrincipal? ValidateToken(string token)
@@ -55,12 +74,14 @@ public sealed class JwtAuthenticationMiddleware
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = _keyProvider.SigningKey,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30)
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = "sub",
+            RoleClaimType = "role"
         };
 
         try
         {
-            var handler = new JwtSecurityTokenHandler();
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             return handler.ValidateToken(token, parameters, out _);
         }
         catch (Exception ex)

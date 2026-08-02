@@ -146,6 +146,12 @@ namespace ConsultationService.Infrastructure.Data.Migrations
                     b.Property<Guid?>("RoutingDecisionId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ScheduledSlotId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -175,6 +181,8 @@ namespace ConsultationService.Infrastructure.Data.Migrations
                     b.HasIndex("DoctorId");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("ScheduledSlotId");
 
                     b.HasIndex("Status");
 

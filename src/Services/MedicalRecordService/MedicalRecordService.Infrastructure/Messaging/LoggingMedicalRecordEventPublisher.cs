@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace MedicalRecordService.Infrastructure.Messaging;
 
 /// <summary>
-/// Kafka publisher placeholder: logs outbound events until Confluent producer is wired.
+/// Kafka publisher placeholder: logs outbound events when Kafka producer is not used.
 /// </summary>
 public sealed class LoggingMedicalRecordEventPublisher : IMedicalRecordEventPublisher
 {
@@ -26,6 +26,7 @@ public sealed class LoggingMedicalRecordEventPublisher : IMedicalRecordEventPubl
         Guid eventId,
         string eventType,
         long version,
+        string? payloadJson = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
@@ -35,6 +36,46 @@ public sealed class LoggingMedicalRecordEventPublisher : IMedicalRecordEventPubl
             eventId,
             eventType,
             version,
+            _kafka.Enabled);
+
+        return Task.CompletedTask;
+    }
+
+    public Task PublishPatientMoodUpdatedAsync(
+        Guid patientId,
+        Guid medicalEventId,
+        IReadOnlyList<Guid> recipientDoctorIds,
+        IReadOnlyDictionary<string, string> templateData,
+        string priority,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation(
+            "Publish {Topic}: patient={PatientId} event={EventId} doctors={DoctorCount} priority={Priority} enabled={Enabled}",
+            _kafka.PatientMoodUpdatedTopic,
+            patientId,
+            medicalEventId,
+            recipientDoctorIds.Count,
+            priority,
+            _kafka.Enabled);
+
+        return Task.CompletedTask;
+    }
+
+    public Task PublishPatientTriageCompletedAsync(
+        Guid patientId,
+        Guid medicalEventId,
+        IReadOnlyList<Guid> recipientDoctorIds,
+        IReadOnlyDictionary<string, string> templateData,
+        string priority,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation(
+            "Publish {Topic}: patient={PatientId} event={EventId} doctors={DoctorCount} priority={Priority} enabled={Enabled}",
+            _kafka.PatientTriageCompletedTopic,
+            patientId,
+            medicalEventId,
+            recipientDoctorIds.Count,
+            priority,
             _kafka.Enabled);
 
         return Task.CompletedTask;

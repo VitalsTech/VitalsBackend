@@ -20,7 +20,7 @@ public sealed class PrescriptionRepository : IPrescriptionRepository
 
     public async Task<IReadOnlyList<Prescription>> GetByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default) =>
         await _db.Prescriptions.AsNoTracking().Include(x => x.Medications)
-            .Where(x => x.PatientId == patientId && x.Status != PrescriptionStatus.Draft)
+            .Where(x => x.PatientId == patientId)
             .OrderByDescending(x => x.IssuedAt)
             .ToListAsync(cancellationToken);
 

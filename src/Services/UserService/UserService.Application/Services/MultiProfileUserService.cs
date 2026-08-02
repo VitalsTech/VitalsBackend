@@ -24,6 +24,17 @@ namespace UserService.Application.Services
         Task<bool> HasProfileAsync(Guid userPublicId, ProfileType profileType);
         Task<UserWithProfilesDto?> GetUserByPhoneAsync(string phone);
         Task<UserWithProfilesDto?> GetUserByEmailAsync(string email);
+        Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request);
+
+        /// <summary>
+        /// Resolve PublicId or ProfileId → user. Used when services store either identity.
+        /// </summary>
+        Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id);
+
+        /// <summary>
+        /// PublicId ∪ all profile ids for the user (always includes the input id).
+        /// </summary>
+        Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id);
     }
 
     public class MultiProfileUserService : IMultiProfileUserService
@@ -175,6 +186,13 @@ namespace UserService.Application.Services
                 throw new ValidationException($"Invalid profile type value. Allowed values: Patient, Doctor, Organization. Received: {request.ProfileType}");
             }
 
+            // Self-service add-profile may only create Patient. Doctor/Organization require registration or admin flow.
+            if (profileType is ProfileType.Doctor or ProfileType.Organization)
+            {
+                throw new ValidationException(
+                    "Doctor and Organization profiles cannot be added via self-service. Register with the desired profile or use an admin API.");
+            }
+
             var existingProfile = await _userRepository.GetProfileByUserAndTypeAsync(user.Id, profileType);
             if (existingProfile != null)
                 throw new InvalidOperationException($"User already has a {request.ProfileType} profile");
@@ -184,8 +202,6 @@ namespace UserService.Application.Services
             profile = profileType switch
             {
                 ProfileType.Patient when request.PatientProfile != null => await CreatePatientProfile(user.Id, request.PatientProfile),
-                ProfileType.Doctor when request.DoctorProfile != null => await CreateDoctorProfile(user.Id, request.DoctorProfile),
-                ProfileType.Organization when request.OrganizationProfile != null => await CreateOrganizationProfile(user.Id, request.OrganizationProfile),
                 _ => throw new ValidationException($"{profileType} profile data must be provided")
             };
 
@@ -438,6 +454,75 @@ namespace UserService.Application.Services
                 return null;
 
             return await GetUserWithProfilesAsync(user.PublicId);
+        }
+
+        public async Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request)
+        {
+            var user = await _userRepository.GetByPublicIdAsync(userPublicId)
+                ?? throw new UserNotFoundException($"User {userPublicId} not found.");
+
+            var profile = await _userRepository.GetProfileByUserAndTypeAsync(user.Id, ProfileType.Doctor)
+                ?? throw new InvalidOperationException("У пользователя нет профиля врача.");
+
+            if (!profile.IsActive)
+                throw new InvalidOperationException("Профиль врача неактивен.");
+
+            if (profile.DoctorProfile is null)
+                throw new InvalidOperationException("Профиль врача не найден.");
+
+            if (!string.IsNullOrWhiteSpace(request.Specialization))
+                profile.DoctorProfile.Specialization = request.Specialization.Trim();
+
+            if (request.Biography is not null)
+                profile.DoctorProfile.Biography = string.IsNullOrWhiteSpace(request.Biography) ? null : request.Biography.Trim();
+
+            if (request.AcademicDegree is not null)
+                profile.DoctorProfile.AcademicDegree = string.IsNullOrWhiteSpace(request.AcademicDegree) ? null : request.AcademicDegree.Trim();
+
+            _userRepository.UpdateProfile(profile);
+            await _userRepository.SaveChangesAsync();
+            return await GetUserWithProfilesAsync(userPublicId);
+        }
+
+        public async Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id)
+        {
+            try
+            {
+                return await GetUserWithProfilesAsync(id);
+            }
+            catch (UserNotFoundException)
+            {
+                /* maybe ProfileId */
+            }
+
+            var roles = await _userRoleRepository.GetByProfileAsync(id);
+            var userId = roles.Select(r => r.UserId).FirstOrDefault();
+            if (userId == Guid.Empty)
+                return null;
+
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user is null)
+                return null;
+
+            return await GetUserWithProfilesAsync(user.PublicId);
+        }
+
+        public async Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id)
+        {
+            var ids = new HashSet<Guid> { id };
+            var user = await GetUserByPublicIdOrProfileIdAsync(id);
+            if (user is null)
+                return ids.ToList();
+
+            if (user.PublicId != Guid.Empty)
+                ids.Add(user.PublicId);
+            foreach (var profile in user.Profiles)
+            {
+                if (profile.ProfileId != Guid.Empty)
+                    ids.Add(profile.ProfileId);
+            }
+
+            return ids.ToList();
         }
     }
     public class PatientProfileData

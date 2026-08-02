@@ -79,6 +79,12 @@ namespace UserService.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("BookedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConsultationSessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("DoctorProfileId")
                         .HasColumnType("uuid");
 
@@ -91,10 +97,15 @@ namespace UserService.Infrastructure.Migrations
                     b.Property<bool>("IsOnline")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("PatientId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("StartsAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConsultationSessionId");
 
                     b.HasIndex("DoctorProfileId", "StartsAt");
 

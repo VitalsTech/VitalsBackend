@@ -17,10 +17,23 @@ public sealed class RoutingDecisionRepository : IRoutingDecisionRepository
     public Task<RoutingDecision?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         _db.RoutingDecisions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
+    public Task<RoutingDecision?> GetLatestByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default) =>
+        _db.RoutingDecisions
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(x => x.PatientId == patientId, cancellationToken);
+
     public async Task SaveDecisionWithAuditAsync(RoutingDecision decision, RoutingAuditEntry audit, CancellationToken cancellationToken = default)
     {
         _db.RoutingDecisions.Add(decision);
         _db.RoutingAuditEntries.Add(audit);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpdateAsync(RoutingDecision decision, CancellationToken cancellationToken = default)
+    {
+        if (_db.Entry(decision).State == EntityState.Detached)
+            _db.RoutingDecisions.Update(decision);
+
         await _db.SaveChangesAsync(cancellationToken);
     }
 

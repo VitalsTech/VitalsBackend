@@ -30,9 +30,12 @@
 | POST | `/api/consultations/{id}/consent` | Согласие на обработку данных |
 | GET/POST | `/api/consultations/{id}/messages` | История / отправка |
 | POST | `/api/consultations/{id}/pause`, `/resume` | Пауза |
-| POST | `/api/consultations/{id}/doctor-leave` | Врач завершил |
-| POST | `/api/consultations/{id}/complete` | Протокол консультации |
-| POST | `/api/consultations/{id}/confirm` | Подтверждение пациента |
+| POST | `/api/consultations/{id}/doctor-leave` | Врач вышел без протокола → `DoctorLeft` |
+| POST | `/api/consultations/{id}/complete` | Протокол + закрытие → `Completed`; в ответе и в `GET` есть `protocol` |
+| POST | `/api/consultations/{id}/confirm` | Опционально для пациента; если уже `Completed` — идемпотентно вернёт сессию |
+
+После `/complete` консультация сразу `Completed` (не ждёт confirm). Протокол пишется в медкарту
+(`ConsultationCompleted` + `DiagnosisConfirmed`), доступен в `GET /api/consultations/{id}` как `protocol`.
 | POST | `/api/consultations/{id}/cancel` | Отмена |
 | POST | `/api/consultations/{id}/video/start` | Комната SFU (stub) |
 | POST | `/api/consultations/{id}/emergency` | Экстренный протокол |
@@ -41,9 +44,28 @@
 
 Internal (без JWT):
 
-| Метод | Путь |
-| --- | --- |
-| POST | `/internal/consultations/routing-decision` |
+| Метод | Путь | Описание |
+| --- | --- | --- |
+| POST | `/internal/consultations/routing-decision` | Создать сессию из решения маршрутизации |
+| GET | `/internal/consultations/patients/{patientId}/latest-doctor` | Последний врач пациента (адресаты уведомлений) |
+| GET | `/internal/consultations/doctors/sessions?doctorIds=&from=&to=&openSince=` | Сессии врача в интервале — источник занятости для календаря в Gateway |
+
+Публичный список для текущего пользователя (через Gateway `GET /api/v1/consultations/mine`):
+
+| Метод | Путь | Описание |
+| --- | --- | --- |
+| GET | `/api/consultations/mine?includeCompleted=&limit=` | Консультации пациента и/или врача по JWT (`isScheduled` отличает запись на слот от свободного чата) |
+
+`doctorIds` — sub и все `profile_id` из JWT врача через запятую. Возвращаются сессии, чьё время
+(`scheduledAt ?? startedAt ?? createdAt`) попадает в интервал, плюс незакрытые сессии независимо от даты;
+`openSince` ограничивает их по `lastActivityAt`.
+
+## Запись на слот расписания
+
+`CreateConsultationRequest` принимает `scheduledAt` и `scheduledSlotId` — время приёма из брони слота
+и сам слот (владелец слотов — UserService). Если `scheduledSlotId` задан, `POST /api/consultations`
+всегда создаёт новую сессию и не переиспользует активный чат с этим врачом: запись на конкретное
+время — отдельный приём. Резервирование слота выполняет шлюз, см. `docs/ApiGateway.md`.
 
 ## SignalR
 

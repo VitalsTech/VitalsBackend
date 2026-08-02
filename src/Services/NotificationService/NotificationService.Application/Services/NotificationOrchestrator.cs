@@ -252,8 +252,19 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
 
     private static Guid ResolveTargetUser(NotificationEventDto e, string templateKey)
     {
-        if (templateKey.Contains(".doctor.", StringComparison.OrdinalIgnoreCase) && e.SecondaryUserId.HasValue)
-            return e.SecondaryUserId.Value;
+        // Some producers set UserId=patient and SecondaryUserId=doctor.
+        // consultation.created doctor events already set UserId=doctor (recipient_role=doctor).
+        if (templateKey.Contains(".doctor.", StringComparison.OrdinalIgnoreCase))
+        {
+            if (e.TemplateData.TryGetValue("recipient_role", out var role) &&
+                role.Equals("doctor", StringComparison.OrdinalIgnoreCase))
+            {
+                return e.UserId;
+            }
+
+            if (e.SecondaryUserId.HasValue)
+                return e.SecondaryUserId.Value;
+        }
 
         return e.UserId;
     }
@@ -288,6 +299,8 @@ public sealed class NotificationOrchestrator : INotificationOrchestrator
         EventType = log.EventType,
         Channel = log.Channel,
         Status = log.Status,
+        Subject = log.Subject,
+        Body = log.Body,
         AttemptCount = log.AttemptCount,
         CreatedAt = log.CreatedAt,
         DeliveredAt = log.DeliveredAt

@@ -18,4 +18,12 @@ public class DoctorScheduleSlot
     public DateTime EndsAt { get; set; }
     public bool IsAvailable { get; set; } = true;
     public bool IsOnline { get; set; } = true;
+
+    /// <summary>PublicId пациента, забронировавшего слот.</summary>
+    public Guid? PatientId { get; set; }
+
+    /// <summary>Консультация, созданная под эту бронь.</summary>
+    public Guid? ConsultationSessionId { get; set; }
+
+    public DateTime? BookedAt { get; set; }
 }

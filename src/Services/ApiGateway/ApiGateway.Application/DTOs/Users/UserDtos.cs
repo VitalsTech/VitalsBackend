@@ -13,6 +13,8 @@ public sealed class SwitchProfileRequestDto
 {
     public Guid PublicId { get; set; }
     public Guid ProfileId { get; set; }
+    public string? RefreshToken { get; set; }
+    public string? DeviceFingerprint { get; set; }
 }
 
 public sealed class CreateUserProfileRequestDto

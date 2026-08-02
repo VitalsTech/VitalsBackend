@@ -21,6 +21,18 @@ public sealed class UserServiceOptions
     public bool UseStubSchedule { get; set; } = true;
 }
 
+public sealed class ConsultationServiceOptions
+{
+    public const string SectionName = "ConsultationService";
+    public string BaseUrl { get; set; } = "http://localhost:5240";
+}
+
+public sealed class PrescriptionServiceOptions
+{
+    public const string SectionName = "PrescriptionService";
+    public string BaseUrl { get; set; } = "http://localhost:5250";
+}
+
 public sealed class KafkaOptions
 {
     public const string SectionName = "Kafka";

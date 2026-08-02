@@ -46,6 +46,7 @@ public sealed class PatientStateProjections
 public interface IAccessGrantRepository
 {
     Task<IReadOnlyList<AccessGrant>> GetActiveGrantsAsync(Guid patientId, Guid granteeId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AccessGrant>> GetActiveDoctorGrantsForPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
     Task<AccessGrant?> GetByIdAsync(Guid grantId, CancellationToken cancellationToken = default);
     Task AddAsync(AccessGrant grant, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);

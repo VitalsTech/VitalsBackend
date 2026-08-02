@@ -130,6 +130,7 @@ public sealed class RuleBasedRoutingEngine : IRoutingEngine
         var format = ResolveConsultationFormat(triage, summary, effectiveUrgency, selectedSpecialist, rejected);
         var isFallback = selectedSpecialist == _options.DefaultSpecialist && triage.Hypotheses.Count == 0;
 
+        var patientMessage = BuildPatientMessage(selectedSpecialist, format, effectiveUrgency);
         return new RoutingEngineResult
         {
             OutcomeType = nameof(RoutingOutcomeType.Consultation),
@@ -137,11 +138,21 @@ public sealed class RuleBasedRoutingEngine : IRoutingEngine
             ConsultationFormat = format,
             EffectiveUrgencyLevel = effectiveUrgency,
             Priority = CalculatePriority(effectiveUrgency, input.ClinicRules),
-            PatientMessage = BuildPatientMessage(selectedSpecialist, format, effectiveUrgency),
+            PatientMessage = patientMessage,
             Rationale = BuildRationale(triage, selectedSpecialist, format, input.MedicalContext),
             IsFallback = isFallback,
             RejectedAlternatives = rejected,
-            EventsToPublish = ["routing.decision"]
+            EventsToPublish = ["routing.decision"],
+            PlannedSteps =
+            [
+                new RouteStepDto
+                {
+                    StepNumber = 1,
+                    Action = "consultation",
+                    Status = "pending",
+                    Description = patientMessage
+                }
+            ]
         };
     }
 

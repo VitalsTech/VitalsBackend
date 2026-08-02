@@ -33,11 +33,11 @@ public sealed class GlobalExceptionMiddleware
 
             if (_environment.IsDevelopment())
             {
-                await context.Response.WriteAsJsonAsync(new { error = "An internal error occurred.", errorId, detail = ex.Message });
+                await context.Response.WriteAsJsonAsync(new { error = "Внутренняя ошибка сервера.", errorId, detail = ex.Message });
             }
             else
             {
-                await context.Response.WriteAsJsonAsync(new { error = "An internal error occurred.", errorId });
+                await context.Response.WriteAsJsonAsync(new { error = "Внутренняя ошибка сервера.", errorId });
             }
         }
     }

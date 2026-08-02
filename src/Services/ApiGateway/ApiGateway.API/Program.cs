@@ -7,6 +7,7 @@ using ApiGateway.Infrastructure;
 using ApiGateway.Infrastructure.Security;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using MicroElements.Swashbuckle.FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
@@ -25,7 +26,16 @@ public static class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(c =>
         {
-            c.SwaggerDoc("v1", new OpenApiInfo { Title = "Vitals API Gateway", Version = "v1" });
+            c.SwaggerDoc("v1", new OpenApiInfo
+            {
+                Title = "Vitals API Gateway",
+                Version = "v1",
+                Description = "Единая точка входа Vitals. JWT role claim = short \"role\". " +
+                              "Для входа врачом передайте preferredProfileType=Doctor (если профиль есть). " +
+                              "История медкарты: eventTypes через запятую; alias document → DocumentUploaded."
+            });
+            c.SchemaFilter<Swagger.GatewaySchemaFilter>();
+            c.OperationFilter<Swagger.GatewayOperationFilter>();
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -50,6 +60,7 @@ public static class Program
         builder.Services.AddFluentValidationAutoValidation();
         builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestDtoValidator>();
         builder.Services.AddValidatorsFromAssemblyContaining<UserSearchRequestDtoValidator>();
+        builder.Services.AddFluentValidationRulesToSwagger();
 
         ConfigureJwt(builder);
         ConfigureCompression(builder);
@@ -95,6 +106,9 @@ public static class Program
             .Configure<JwtSigningKeyProvider, Microsoft.Extensions.Options.IOptions<JwtOptions>>((options, keys, jwt) =>
             {
                 var jwtOptions = jwt.Value;
+                // Keep short JWT claim names ("role", "sub") — default inbound mapping
+                // rewrites "role" → ClaimTypes.Role and breaks [Authorize(Roles = "Doctor")].
+                options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,

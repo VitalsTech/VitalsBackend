@@ -24,6 +24,7 @@ public sealed class BackendServicesOptions
     public string PaymentService { get; set; } = "http://localhost:5280";
     public string AnalyticsService { get; set; } = "http://localhost:5290";
     public string QualityService { get; set; } = "http://localhost:5295";
+    public string RoutingService { get; set; } = "http://localhost:5230";
 }
 
 public sealed class ServiceAuthOptions

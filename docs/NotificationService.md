@@ -30,6 +30,12 @@
 | `payment.failed` | push, sms, email |
 | `system.maintenance` | push, email |
 | `auto_response_required` | push |
+| `patient.mood.updated` | push, email → врачи (категория `mood`) |
+| `patient.triage.completed` | push, email → врачи (категория `triage`) |
+
+Получатели mood/triage: активные doctor access-grants ∪ врач последней консультации (MedicalRecordService). Идемпотентность: `eventId` = MD5(medicalEventId + doctorId + eventType).
+
+Категории preferences: `consultations`, `messages`, `labs`, `prescriptions`, `payments`, `marketing`, `system`, `mood`, `triage` (по умолчанию pushEnabled=true).
 
 ## API (JWT)
 

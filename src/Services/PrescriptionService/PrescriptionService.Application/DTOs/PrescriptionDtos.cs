@@ -16,7 +16,7 @@ public sealed class MedicationItemDto
     public string? MaxDailyDose { get; set; }
 }
 
-public sealed class CreatePrescriptionRequest
+public class CreatePrescriptionRequest
 {
     public Guid PatientId { get; set; }
     public Guid? ConsultationId { get; set; }
@@ -28,6 +28,12 @@ public sealed class CreatePrescriptionRequest
     public string? PharmacistComment { get; set; }
     public IReadOnlyList<MedicationItemDto> Medications { get; set; } = Array.Empty<MedicationItemDto>();
     public bool ConfirmWarnings { get; set; }
+}
+
+/// <summary>Internal create from consultation complete — doctorId в теле.</summary>
+public sealed class InternalCreatePrescriptionRequest : CreatePrescriptionRequest
+{
+    public Guid DoctorId { get; set; }
 }
 
 public sealed class ValidationIssueDto

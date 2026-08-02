@@ -55,7 +55,7 @@ public class MultiProfileUserServiceTests
     }
 
     [Fact]
-    public async Task AddProfileToUserAsync_adds_doctor_profile()
+    public async Task AddProfileToUserAsync_rejects_doctor_profile_via_self_service()
     {
         var userRepository = new InMemoryUserRepository();
         var user = CreateUser("89000936941", "doctor@example.com", "Doctor", "House");
@@ -80,18 +80,18 @@ public class MultiProfileUserServiceTests
             }
         };
 
-        var profile = await service.AddProfileToUserAsync(request);
-
-        Assert.Equal(ProfileType.Doctor, profile.ProfileType);
-        Assert.NotNull(profile.DoctorProfile);
-        Assert.Equal(DoctorCategory.Highest, profile.DoctorProfile!.Category);
-        Assert.Equal("Therapist", profile.DoctorProfile.Specialization);
+        await Assert.ThrowsAsync<FluentValidation.ValidationException>(() => service.AddProfileToUserAsync(request));
     }
 
     private static IMultiProfileUserService CreateMultiProfileService(IUserRepository userRepository)
     {
         var mapper = CreateMapper();
-        return new MultiProfileUserService(userRepository, mapper, new PassthroughEncryptionService());
+        return new MultiProfileUserService(
+            userRepository,
+            mapper,
+            new PassthroughEncryptionService(),
+            new InMemoryRoleRepository(),
+            new InMemoryUserRoleRepository());
     }
 }
 
@@ -240,6 +240,7 @@ public class PermissionServiceTests
 
         var profile1 = CreateProfile(user.Id, ProfileType.Doctor);
         var profile2 = CreateProfile(user.Id, ProfileType.Organization);
+        profile2.IsActive = false;
         await userRepository.AddProfileAsync(profile1);
         await userRepository.AddProfileAsync(profile2);
 
@@ -266,8 +267,8 @@ public class PermissionServiceTests
         var response = await service.GetUserRolesAndPermissionsAsync(user.PublicId);
 
         Assert.Equal(user.PublicId, response.UserPublicId);
-        Assert.Equal(new[] { "Admin", "Viewer" }, response.Roles.OrderBy(x => x).ToArray());
-        Assert.Equal(new[] { "users.block", "users.read", "users.write" }, response.Permissions.OrderBy(x => x).ToArray());
+        Assert.Equal(new[] { "Admin" }, response.Roles.OrderBy(x => x).ToArray());
+        Assert.Equal(new[] { "users.block", "users.read" }, response.Permissions.OrderBy(x => x).ToArray());
         Assert.True(await service.HasRoleAsync(user.PublicId, "Admin"));
         Assert.True(await service.HasPermissionAsync(user.PublicId, "users.write"));
     }
@@ -393,6 +394,15 @@ internal sealed class NullMultiProfileUserService : IMultiProfileUserService
 
     public Task<UserWithProfilesDto?> GetUserByEmailAsync(string email)
         => throw new NotSupportedException();
+
+    public Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request)
+        => throw new NotSupportedException();
+
+    public Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id)
+        => throw new NotSupportedException();
+
+    public Task<IReadOnlyList<Guid>> ResolveIdentityIdsAsync(Guid id)
+        => throw new NotSupportedException();
 }
 
 internal sealed class InMemoryUserRepository : IUserRepository
@@ -471,6 +481,44 @@ internal sealed class InMemoryUserRepository : IUserRepository
             query = query.Where(filter);
         return query.ToList();
     }
+}
+
+internal sealed class InMemoryRoleRepository : IRoleRepository
+{
+    private readonly List<Role> _roles =
+    [
+        new() { Id = Guid.NewGuid(), Name = "Patient" },
+        new() { Id = Guid.NewGuid(), Name = "Doctor" },
+        new() { Id = Guid.NewGuid(), Name = "ClinicAdmin" }
+    ];
+
+    public Task<Role?> GetByIdAsync(Guid id)
+        => Task.FromResult(_roles.FirstOrDefault(r => r.Id == id));
+
+    public Task<Role?> GetByNameAsync(string name)
+        => Task.FromResult(_roles.FirstOrDefault(r => r.Name == name));
+
+    public Task<IEnumerable<Role>> GetAllAsync()
+        => Task.FromResult(_roles.AsEnumerable());
+
+    public Task<IEnumerable<Role>> GetRolesByOrganizationAsync(Guid organizationId)
+        => Task.FromResult(Enumerable.Empty<Role>());
+
+    public Task<IEnumerable<Role>> GetRolesByProfileAsync(Guid profileId)
+        => Task.FromResult(Enumerable.Empty<Role>());
+
+    public Task AddAsync(Role role)
+    {
+        _roles.Add(role);
+        return Task.CompletedTask;
+    }
+
+    public void Update(Role role) { }
+
+    public void Delete(Role role) => _roles.Remove(role);
+
+    public Task<bool> ExistsAsync(string name, Guid? organizationId = null)
+        => Task.FromResult(_roles.Any(r => r.Name == name));
 }
 
 internal sealed class InMemoryUserRoleRepository : IUserRoleRepository

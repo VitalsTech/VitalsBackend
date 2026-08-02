@@ -23,6 +23,8 @@ public static class DependencyInjection
     {
         services.Configure<JwtValidationOptions>(configuration.GetSection(JwtValidationOptions.SectionName));
         services.Configure<MedicalRecordServiceOptions>(configuration.GetSection(MedicalRecordServiceOptions.SectionName));
+        services.Configure<PrescriptionServiceOptions>(configuration.GetSection(PrescriptionServiceOptions.SectionName));
+        services.Configure<RoutingServiceOptions>(configuration.GetSection(RoutingServiceOptions.SectionName));
         services.Configure<KafkaOptions>(configuration.GetSection(KafkaOptions.SectionName));
         services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
         services.Configure<ConsultationOptions>(configuration.GetSection(ConsultationOptions.SectionName));
@@ -50,7 +52,7 @@ public static class DependencyInjection
         services.AddHostedService<RoutingDecisionConsumerHostedService>();
         services.AddHostedService<SessionTimeoutHostedService>();
 
-        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>(client =>
+        void AddServiceAuth(HttpClient client)
         {
             var apiKey = configuration["ServiceAuth:ApiKey"];
             if (!string.IsNullOrWhiteSpace(apiKey))
@@ -58,7 +60,12 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.Add("X-Service-Key", apiKey);
                 client.DefaultRequestHeaders.Add("X-Service-Name", "consultation-service");
             }
-        });
+        }
+
+        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>(AddServiceAuth);
+        services.AddHttpClient<ILabOrderClient, LabOrderClient>(AddServiceAuth);
+        services.AddHttpClient<IPrescriptionClient, PrescriptionClient>(AddServiceAuth);
+        services.AddHttpClient<IRoutingClient, RoutingClient>(AddServiceAuth);
         services.AddSignalR();
 
         return services;

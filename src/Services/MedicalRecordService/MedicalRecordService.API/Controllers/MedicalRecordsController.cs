@@ -2,6 +2,7 @@ using MedicalRecordService.API.Infrastructure;
 using MedicalRecordService.Application.DTOs;
 using MedicalRecordService.Application.Interfaces;
 using MedicalRecordService.Application.Options;
+using MedicalRecordService.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -44,7 +45,13 @@ public class MedicalRecordsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// История событий медкарты.
+    /// eventTypes — через запятую, например DiagnosisConfirmed,DocumentUploaded.
+    /// Алиас document → DocumentUploaded.
+    /// </summary>
     [HttpGet("history")]
+    [ProducesResponseType(typeof(PatientHistoryResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientHistoryResponse>> GetHistory(
         Guid patientId,
         [FromQuery] DateTime? from,
@@ -52,9 +59,12 @@ public class MedicalRecordsController : ControllerBase
         [FromQuery] string? eventTypes,
         CancellationToken cancellationToken)
     {
-        var types = string.IsNullOrWhiteSpace(eventTypes)
-            ? null
-            : eventTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        IReadOnlyList<string>? types = null;
+        if (!string.IsNullOrWhiteSpace(eventTypes))
+        {
+            types = MedicalEventTypes.NormalizeFilter(
+                eventTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
 
         var actor = ActorContextFactory.FromHttpContext(HttpContext, _jwtOptions);
         var result = await _queries.GetHistoryAsync(patientId, from, to, types, actor, cancellationToken);

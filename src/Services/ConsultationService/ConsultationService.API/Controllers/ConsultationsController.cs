@@ -20,7 +20,49 @@ public sealed class ConsultationsController : ControllerBase
     public async Task<ActionResult<ConsultationSessionResponse>> Create(
         [FromBody] CreateConsultationRequest request,
         CancellationToken cancellationToken) =>
-        Ok(await _consultations.CreateManualAsync(request, cancellationToken));
+        Ok(await _consultations.OpenOrCreateAsync(request, cancellationToken));
+
+    /// <summary>
+    /// Список консультаций текущего пользователя.
+    /// Пациент видит свои записи (в т.ч. запланированные через book), врач — свои приёмы.
+    /// </summary>
+    [HttpGet("mine")]
+    public async Task<ActionResult<MyConsultationsResponse>> ListMine(
+        [FromQuery] bool includeCompleted = false,
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        var asPatient = UserClaims.IsPatient(User);
+        var asDoctor = UserClaims.IsDoctor(User);
+
+        // Если роль в токене не размечена — отдаём всё, где пользователь фигурирует.
+        if (!asPatient && !asDoctor)
+        {
+            asPatient = true;
+            asDoctor = true;
+        }
+
+        var items = await _consultations.ListMineAsync(
+            ids,
+            asPatient,
+            asDoctor,
+            includeCompleted,
+            limit,
+            cancellationToken);
+
+        return Ok(new MyConsultationsResponse { Items = items });
+    }
+
+    [HttpGet("active")]
+    public async Task<ActionResult<ConsultationSessionResponse>> GetActive(
+        [FromQuery] Guid patientId,
+        [FromQuery] Guid doctorId,
+        CancellationToken cancellationToken)
+    {
+        var session = await _consultations.FindActiveAsync(patientId, doctorId, cancellationToken);
+        return session is null ? NotFound() : Ok(session);
+    }
 
     [HttpGet("{sessionId:guid}")]
     public async Task<ActionResult<ConsultationSessionResponse>> Get(Guid sessionId, CancellationToken cancellationToken) =>
@@ -29,12 +71,29 @@ public sealed class ConsultationsController : ControllerBase
     [HttpPost("{sessionId:guid}/join")]
     public async Task<ActionResult<ConsultationSessionResponse>> Join(
         Guid sessionId,
-        [FromBody] JoinSessionRequest request,
+        [FromBody] JoinSessionRequest? request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        var role = Enum.Parse<ParticipantRole>(request.Role, true);
-        return Ok(await _consultations.JoinAsync(sessionId, userId, role, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        var userId = ids[0];
+        var roleFromToken = UserClaims.GetParticipantRole(User);
+
+        if (request is not null &&
+            !string.IsNullOrWhiteSpace(request.Role) &&
+            request.Role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) &&
+            roleFromToken != ParticipantRole.Doctor)
+        {
+            return Forbid();
+        }
+
+        var role = roleFromToken;
+        if (roleFromToken == ParticipantRole.Doctor &&
+            request?.Role?.Equals("Patient", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            role = ParticipantRole.Patient;
+        }
+
+        return Ok(await _consultations.JoinAsync(sessionId, userId, role, ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/consent")]
@@ -43,16 +102,31 @@ public sealed class ConsultationsController : ControllerBase
         [FromBody] ConsentRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.RecordConsentAsync(sessionId, userId, request, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.RecordConsentAsync(sessionId, ids[0], request, ids, cancellationToken));
     }
 
     [HttpGet("{sessionId:guid}/messages")]
     public async Task<ActionResult<IReadOnlyList<ConsultationMessageDto>>> GetMessages(
         Guid sessionId,
         [FromQuery] long afterSequence = 0,
-        CancellationToken cancellationToken = default) =>
-        Ok(await _consultations.GetMessagesAsync(sessionId, afterSequence, cancellationToken));
+        [FromQuery] bool markAsRead = true,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        var role = UserClaims.GetParticipantRole(User);
+        return Ok(await _consultations.GetMessagesAsync(sessionId, afterSequence, ids[0], role, markAsRead, ids, cancellationToken));
+    }
+
+    [HttpPost("{sessionId:guid}/messages/read")]
+    public async Task<ActionResult<ConsultationSessionResponse>> MarkMessagesRead(
+        Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        var role = UserClaims.GetParticipantRole(User);
+        return Ok(await _consultations.MarkMessagesReadAsync(sessionId, ids[0], role, ids, cancellationToken));
+    }
 
     [HttpPost("{sessionId:guid}/messages")]
     public async Task<ActionResult<ConsultationMessageDto>> SendMessage(
@@ -60,50 +134,51 @@ public sealed class ConsultationsController : ControllerBase
         [FromBody] SendMessageRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        var roleClaim = User.FindFirst("role")?.Value ?? "patient";
-        var role = roleClaim.Contains("doctor", StringComparison.OrdinalIgnoreCase)
-            ? ParticipantRole.Doctor
-            : ParticipantRole.Patient;
-        return Ok(await _consultations.SendMessageAsync(sessionId, userId, role, request, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        var role = UserClaims.GetParticipantRole(User);
+        return Ok(await _consultations.SendMessageAsync(sessionId, ids[0], role, request, ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/pause")]
+    [Authorize(Roles = "Doctor")]
     public async Task<ActionResult<ConsultationSessionResponse>> Pause(Guid sessionId, CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.PauseAsync(sessionId, userId, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.PauseAsync(sessionId, ids[0], ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/resume")]
+    [Authorize(Roles = "Doctor")]
     public async Task<ActionResult<ConsultationSessionResponse>> Resume(Guid sessionId, CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.ResumeAsync(sessionId, userId, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.ResumeAsync(sessionId, ids[0], ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/doctor-leave")]
+    [Authorize(Roles = "Doctor")]
     public async Task<ActionResult<ConsultationSessionResponse>> DoctorLeave(Guid sessionId, CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.DoctorLeaveAsync(sessionId, userId, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.DoctorLeaveAsync(sessionId, ids[0], ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/complete")]
+    [Authorize(Roles = "Doctor")]
     public async Task<ActionResult<ConsultationSessionResponse>> Complete(
         Guid sessionId,
         [FromBody] CompleteConsultationRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.CompleteAsync(sessionId, userId, request, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.CompleteAsync(sessionId, ids[0], request, ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/confirm")]
     public async Task<ActionResult<ConsultationSessionResponse>> Confirm(Guid sessionId, CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.PatientConfirmAsync(sessionId, userId, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.PatientConfirmAsync(sessionId, ids[0], ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/cancel")]
@@ -112,22 +187,23 @@ public sealed class ConsultationsController : ControllerBase
         [FromBody] CancelSessionRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.CancelAsync(sessionId, userId, request.Reason, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.CancelAsync(sessionId, ids[0], request.Reason, ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/video/start")]
     public async Task<ActionResult<VideoRoomResponse>> StartVideo(Guid sessionId, CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.StartVideoAsync(sessionId, userId, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.StartVideoAsync(sessionId, ids[0], ids, cancellationToken));
     }
 
     [HttpPost("{sessionId:guid}/emergency")]
+    [Authorize(Roles = "Doctor")]
     public async Task<IActionResult> Emergency(Guid sessionId, CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        await _consultations.TriggerEmergencyAsync(sessionId, userId, cancellationToken);
+        var ids = UserClaims.GetIdentityIds(User);
+        await _consultations.TriggerEmergencyAsync(sessionId, ids[0], cancellationToken);
         return Accepted();
     }
 
@@ -137,18 +213,29 @@ public sealed class ConsultationsController : ControllerBase
         [FromBody] SubmitRatingRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        await _consultations.SubmitRatingAsync(sessionId, userId, request, cancellationToken);
+        var ids = UserClaims.GetIdentityIds(User);
+        var role = UserClaims.GetParticipantRole(User);
+        var normalized = new SubmitRatingRequest
+        {
+            Role = role.ToString(),
+            Score = request.Score,
+            Feedback = request.Feedback,
+            ClarityScore = request.ClarityScore,
+            TimelinessScore = request.TimelinessScore,
+            ProblemResolved = request.ProblemResolved
+        };
+        await _consultations.SubmitRatingAsync(sessionId, ids[0], normalized, cancellationToken);
         return NoContent();
     }
 
     [HttpPost("{sessionId:guid}/invite-doctor")]
+    [Authorize(Roles = "Doctor")]
     public async Task<ActionResult<ConsultationSessionResponse>> InviteDoctor(
         Guid sessionId,
         [FromBody] InviteDoctorRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = UserClaims.GetUserId(User);
-        return Ok(await _consultations.InviteDoctorAsync(sessionId, userId, request, cancellationToken));
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.InviteDoctorAsync(sessionId, ids[0], request, cancellationToken));
     }
 }

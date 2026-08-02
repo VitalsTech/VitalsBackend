@@ -59,6 +59,10 @@ public static class VitalsAuthenticationExtensions
         JwtValidationOptions jwt,
         IHostEnvironment environment)
     {
+        // Default inbound mapping rewrites "role" → ClaimTypes.Role while the identity keeps
+        // RoleClaimType = "role", which makes [Authorize(Roles = "Doctor")] return 403.
+        options.MapInboundClaims = false;
+
         if (!string.IsNullOrWhiteSpace(jwt.RsaPublicKeyPem))
         {
             var rsa = RSA.Create();

@@ -14,6 +14,18 @@ public sealed class MedicalRecordServiceOptions
     public string BaseUrl { get; set; } = "http://localhost:5210";
 }
 
+public sealed class PrescriptionServiceOptions
+{
+    public const string SectionName = "PrescriptionService";
+    public string BaseUrl { get; set; } = "http://localhost:5250";
+}
+
+public sealed class RoutingServiceOptions
+{
+    public const string SectionName = "RoutingService";
+    public string BaseUrl { get; set; } = "http://localhost:5230";
+}
+
 public sealed class KafkaOptions
 {
     public const string SectionName = "Kafka";

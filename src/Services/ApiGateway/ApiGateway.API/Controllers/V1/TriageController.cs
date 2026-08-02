@@ -28,7 +28,35 @@ public sealed class TriageController : GatewayControllerBase
     [HttpPost("{sessionId:guid}/messages")]
     public Task<IActionResult> SendMessage(Guid sessionId, [FromBody] SendTriageMessageRequestDto request, CancellationToken cancellationToken)
     {
-        var backendRequest = new { Message = request.Content };
+        var backendRequest = new { Message = request.Text };
         return Forward(_backend.ForwardJsonAsync("triage", HttpMethod.Post, $"api/triage/sessions/{sessionId}/messages", ForwardContext, backendRequest, cancellationToken), cancellationToken);
     }
+
+    [HttpPost("{sessionId:guid}/complete")]
+    public Task<IActionResult> CompleteSession(Guid sessionId, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardAsync("triage", HttpMethod.Post, $"api/triage/sessions/{sessionId}/complete", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
+}
+
+[ApiController]
+[Route("api/v1/triage/patients/{patientId:guid}/sessions")]
+[Authorize]
+public sealed class PatientTriageSessionsController : GatewayControllerBase
+{
+    private readonly IBackendForwarder _backend;
+
+    public PatientTriageSessionsController(IBackendForwarder backend) => _backend = backend;
+
+    [HttpGet]
+    public Task<IActionResult> ListSessions(
+        Guid patientId,
+        [FromQuery] int limit = 5,
+        CancellationToken cancellationToken = default) =>
+        Forward(
+            _backend.ForwardAsync(
+                "triage",
+                HttpMethod.Get,
+                $"api/triage/patients/{patientId}/sessions?limit={Math.Clamp(limit, 1, 50)}",
+                ForwardContext,
+                cancellationToken: cancellationToken),
+            cancellationToken);
 }

@@ -26,26 +26,25 @@ namespace UserService.Application.Services
             if (user == null || IsBlockedOrInactive(user))
                 return new UserRoleResponse { UserPublicId = publicId };
 
-            // Получаем все профили пользователя
-            var profiles = await _userRepository.GetProfilesByUserAsync(user.Id);
-            
+            var profiles = (await _userRepository.GetProfilesByUserAsync(user.Id)).ToList();
             if (!profiles.Any())
                 return new UserRoleResponse { UserPublicId = publicId };
+
+            // Token roles must reflect the active profile only — otherwise a Patient can appear as Doctor.
+            var activeProfiles = profiles.Where(p => p.IsActive).ToList();
+            if (activeProfiles.Count == 0)
+                activeProfiles = profiles.Take(1).ToList();
 
             var rolesList = new List<string>();
             var permissionsList = new List<string>();
 
-            foreach (var profile in profiles)
+            foreach (var profile in activeProfiles)
             {
-                // Получаем роли для каждого профиля
                 var roles = await _userRoleRepository.GetRolesByProfileAsync(profile.Id);
-                var roleNames = roles.Select(r => r.Name);
-                rolesList.AddRange(roleNames);
+                rolesList.AddRange(roles.Select(r => r.Name));
 
-                // Получаем права для ролей этого профиля
                 var permissions = await _permissionRepository.GetPermissionsByProfileAsync(profile.Id);
-                var permissionNames = permissions.Select(p => p.Name);
-                permissionsList.AddRange(permissionNames);
+                permissionsList.AddRange(permissions.Select(p => p.Name));
             }
 
             return new UserRoleResponse
@@ -53,7 +52,7 @@ namespace UserService.Application.Services
                 UserPublicId = publicId,
                 Roles = rolesList.Distinct().ToList(),
                 Permissions = permissionsList.Distinct().ToList(),
-                ProfileIds = profiles.Select(p => p.Id).ToList()
+                ProfileIds = activeProfiles.Select(p => p.Id).ToList()
             };
         }
 

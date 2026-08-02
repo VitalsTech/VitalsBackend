@@ -41,6 +41,41 @@ public sealed class MedicalRecordEventClient : IMedicalRecordEventClient
 
         var response = await _http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            _logger.LogWarning("Medical record append failed for patient {PatientId}: {Status}", patientId, response.StatusCode);
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Medical record append failed for patient {PatientId} event {EventType}: {Status} {Body}",
+                patientId,
+                eventType,
+                response.StatusCode,
+                body);
+        }
+    }
+
+    public async Task GrantDoctorAccessAsync(Guid patientId, Guid doctorId, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"internal/medical-records/patients/{patientId}/access-grants");
+        request.Headers.TryAddWithoutValidation("X-Service-Name", "consultation-service");
+        request.Headers.TryAddWithoutValidation("X-User-Id", Guid.Empty.ToString());
+        request.Content = JsonContent.Create(new
+        {
+            GranteeId = doctorId,
+            GranteeType = "Doctor",
+            Scopes = new[]
+            {
+                "read:projections",
+                "read:history",
+                "write:events"
+            },
+            ExpiresAt = DateTime.UtcNow.AddDays(30)
+        });
+
+        var response = await _http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning(
+                "Doctor access grant failed for patient {PatientId} doctor {DoctorId}: {Status}",
+                patientId,
+                doctorId,
+                response.StatusCode);
     }
 }

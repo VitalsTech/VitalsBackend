@@ -60,12 +60,17 @@ public sealed class NotificationRepository : INotificationRepository
     public Task<NotificationDeliveryLog?> GetDeliveryByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         _db.DeliveryLogs.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<NotificationDeliveryLog>> GetUserHistoryAsync(Guid userId, int limit, CancellationToken cancellationToken = default) =>
-        await _db.DeliveryLogs.AsNoTracking()
-            .Where(x => x.UserId == userId)
+    public async Task<IReadOnlyList<NotificationDeliveryLog>> GetUserHistoryAsync(IReadOnlyList<Guid> userIds, int limit, CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+            return Array.Empty<NotificationDeliveryLog>();
+
+        return await _db.DeliveryLogs.AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId))
             .OrderByDescending(x => x.CreatedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyList<NotificationDeliveryLog>> GetPendingRetriesAsync(DateTime utcNow, CancellationToken cancellationToken = default) =>
         await _db.DeliveryLogs

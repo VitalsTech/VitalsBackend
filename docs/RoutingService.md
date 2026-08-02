@@ -9,8 +9,8 @@
 | Движок маршрутизации | Rule-based (`RuleBasedRoutingEngine`, версия `routing-rules-v1`) |
 | Расписание врачей | **Заглушка** (`StubDoctorScheduler`, 10 врачей) |
 | Medical Record | HTTP → `internal/medical-records/patients/{id}/state` |
-| Kafka consumer | **Заглушка** (обработка через internal HTTP) |
-| Kafka publisher | **Заглушка** (`LoggingRoutingEventPublisher`) |
+| Kafka consumer | Confluent при `Kafka:Enabled`; иначе AITriage бьёт в `POST /internal/routing/triage-completed` |
+| Kafka publisher | При `Enabled: false` — HTTP в Consultation + Prescription (lab-orders) |
 | Состояние маршрутов | PostgreSQL (`patient_routes`) |
 | Правила клиники | PostgreSQL + seed (`clinic_routing_rules`) |
 | Аудит решений | PostgreSQL (`routing_audit_entries`, append-only) |
@@ -31,8 +31,12 @@
 | --- | --- | --- |
 | POST | `/internal/routing/triage-completed` | Обработать событие triage (dev / без Kafka) |
 | GET | `/internal/routing/decisions/{id}` | Решение по ID (internal) |
-| GET | `/api/routing/decisions/{id}` | Решение по ID (JWT) |
-| GET | `/api/routing/patients/{id}/active-route` | Активный многошаговый маршрут (JWT) |
+| GET | `/api/routing/decisions/{id}` | Решение по ID (JWT), включая `recommendedLabs` |
+| GET | `/api/routing/patients/{id}/active-route` | Активный маршрут + `currentDecisionId` (JWT) |
+| POST | `/internal/routing/patients/{id}/labs` | Анализы из протокола консультации → шаг + merge labs в decision |
+
+`active-route` создаётся для любого outcome (не только LabsBeforeConsultation). Если route
+ещё нет, но есть decision — ответ собирается (heal) из последнего decision.
 
 ## Пример (ОРВИ, urgency 3)
 
@@ -75,4 +79,4 @@ PostgreSQL: порт **5436**
 - Confluent producer для исходящих топиков
 - Redis-кэш активных маршрутов
 - Плагины правил и admin UI для клиник
-- Маршрут в ApiGateway (internal proxy)
+- (сделано) HTTP fallback triage→route→consultation без Kafka

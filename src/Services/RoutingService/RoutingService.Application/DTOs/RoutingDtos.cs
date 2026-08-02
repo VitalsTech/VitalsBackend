@@ -45,16 +45,27 @@ public sealed class RoutingDecisionResponse
     public string AlgorithmVersion { get; set; } = string.Empty;
     public bool IsFallback { get; set; }
     public IReadOnlyList<string> PublishedEvents { get; set; } = Array.Empty<string>();
+    /// <summary>Сессия, созданная HTTP-fallback (когда Kafka выключен).</summary>
+    public Guid? ConsultationSessionId { get; set; }
 }
 
 public sealed class PatientActiveRouteResponse
 {
     public Guid RouteId { get; set; }
     public Guid PatientId { get; set; }
+    /// <summary>Текущее routing decision — фронт вызывает GET /decisions/{id} за recommendedLabs.</summary>
+    public Guid? CurrentDecisionId { get; set; }
     public string Status { get; set; } = string.Empty;
     public int CurrentStep { get; set; }
     public int TotalSteps { get; set; }
     public IReadOnlyList<RouteStepDto> Steps { get; set; } = Array.Empty<RouteStepDto>();
+}
+
+public sealed class AppendPostConsultationLabsRequest
+{
+    public Guid ConsultationId { get; set; }
+    public Guid DoctorId { get; set; }
+    public IReadOnlyList<string> Labs { get; set; } = Array.Empty<string>();
 }
 
 public sealed class RouteStepDto

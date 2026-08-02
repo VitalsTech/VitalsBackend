@@ -1,4 +1,3 @@
-using System.Text.Json;
 using RoutingService.Application.DTOs;
 using RoutingService.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -12,12 +11,12 @@ namespace RoutingService.API.Controllers;
 public sealed class RoutingController : ControllerBase
 {
     private readonly IRoutingDecisionRepository _decisions;
-    private readonly IPatientRouteRepository _routes;
+    private readonly IRoutingOrchestrator _orchestrator;
 
-    public RoutingController(IRoutingDecisionRepository decisions, IPatientRouteRepository routes)
+    public RoutingController(IRoutingDecisionRepository decisions, IRoutingOrchestrator orchestrator)
     {
         _decisions = decisions;
-        _routes = routes;
+        _orchestrator = orchestrator;
     }
 
     [HttpGet("decisions/{decisionId:guid}")]
@@ -29,7 +28,7 @@ public sealed class RoutingController : ControllerBase
         if (decision is null)
             return NotFound();
 
-        var labs = JsonSerializer.Deserialize<List<string>>(decision.RecommendedLabsJson) ?? [];
+        var labs = System.Text.Json.JsonSerializer.Deserialize<List<string>>(decision.RecommendedLabsJson) ?? [];
 
         return Ok(new RoutingDecisionResponse
         {
@@ -56,20 +55,10 @@ public sealed class RoutingController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PatientActiveRouteResponse>> GetActiveRoute(Guid patientId, CancellationToken cancellationToken)
     {
-        var route = await _routes.GetActiveByPatientIdAsync(patientId, cancellationToken);
+        var route = await _orchestrator.GetActiveRouteAsync(patientId, cancellationToken);
         if (route is null)
             return NotFound();
 
-        var steps = JsonSerializer.Deserialize<List<RouteStepDto>>(route.StepsJson) ?? [];
-
-        return Ok(new PatientActiveRouteResponse
-        {
-            RouteId = route.Id,
-            PatientId = route.PatientId,
-            Status = route.Status,
-            CurrentStep = route.CurrentStep,
-            TotalSteps = route.TotalSteps,
-            Steps = steps
-        });
+        return Ok(route);
     }
 }

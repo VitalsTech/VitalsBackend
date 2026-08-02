@@ -123,6 +123,14 @@ services:
     build:
       context: ./src
       dockerfile: Services/AITriageService/AITriageService.API/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:80
+      MlServices__ApiKey: ${YANDEX_API_KEY:-}
+      MlServices__FolderId: ${YANDEX_FOLDER_ID:-b1gc07m9dp89u83hutj7}
+      MlServices__Model: ${YANDEX_MODEL:-gpt://b1gc07m9dp89u83hutj7/yandexgpt-5.1/latest}
+      MlServices__UseStubModels: "false"
+      MlServices__Provider: Yandex
     depends_on:
       postgres:
         condition: service_healthy

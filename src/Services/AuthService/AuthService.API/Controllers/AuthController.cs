@@ -30,6 +30,15 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("switch-profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(TokenPairResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TokenPairResponse>> SwitchProfile([FromBody] SwitchProfileRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _auth.SwitchProfileAsync(GetUserPublicId(), request, GetClientIp(), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("refresh")]
     [AllowAnonymous]
     public async Task<ActionResult<TokenPairResponse>> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)

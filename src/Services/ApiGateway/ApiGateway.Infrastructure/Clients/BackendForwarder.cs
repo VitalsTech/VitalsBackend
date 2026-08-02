@@ -81,6 +81,7 @@ public sealed class BackendForwarder : IBackendForwarder
         "payment" => "payment-service",
         "analytics" => "analytics-service",
         "quality" => "quality-service",
+        "routing" => "routing-service",
         _ => throw new ArgumentOutOfRangeException(nameof(serviceName), serviceName, "Unknown backend service.")
     };
 }

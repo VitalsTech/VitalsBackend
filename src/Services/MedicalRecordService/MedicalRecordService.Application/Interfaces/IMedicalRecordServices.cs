@@ -25,11 +25,6 @@ public interface IAccessGrantService
     Task RevokeGrantAsync(Guid patientId, Guid grantId, ActorContext actor, CancellationToken cancellationToken = default);
 }
 
-public interface IMedicalRecordEventPublisher
-{
-    Task PublishEventAppendedAsync(Guid patientId, Guid eventId, string eventType, long version, CancellationToken cancellationToken = default);
-}
-
 public interface IPatientAttachmentService
 {
     Task<PatientAttachmentDto> UploadAsync(

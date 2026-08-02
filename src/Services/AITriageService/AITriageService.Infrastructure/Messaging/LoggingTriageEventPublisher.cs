@@ -10,14 +10,19 @@ public sealed class LoggingTriageEventPublisher : ITriageEventPublisher
 {
     private readonly ILogger<LoggingTriageEventPublisher> _logger;
     private readonly KafkaOptions _kafka;
+    private readonly IRoutingDispatchClient _routing;
 
-    public LoggingTriageEventPublisher(ILogger<LoggingTriageEventPublisher> logger, IOptions<KafkaOptions> kafka)
+    public LoggingTriageEventPublisher(
+        ILogger<LoggingTriageEventPublisher> logger,
+        IOptions<KafkaOptions> kafka,
+        IRoutingDispatchClient routing)
     {
         _logger = logger;
         _kafka = kafka.Value;
+        _routing = routing;
     }
 
-    public Task PublishTriageCompletedAsync(
+    public async Task<RoutingDecisionSummaryDto?> PublishTriageCompletedAsync(
         Guid sessionId,
         Guid patientId,
         LlmTriageResultDto result,
@@ -31,6 +36,9 @@ public sealed class LoggingTriageEventPublisher : ITriageEventPublisher
             result.UrgencyLevel,
             _kafka.Enabled);
 
-        return Task.CompletedTask;
+        if (_kafka.Enabled)
+            return null;
+
+        return await _routing.DispatchTriageCompletedAsync(sessionId, patientId, result, cancellationToken);
     }
 }
