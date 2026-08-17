@@ -1,3 +1,5 @@
+using ConsultationService.Application.DTOs;
+
 namespace ConsultationService.Application.Options;
 
 public sealed class JwtValidationOptions
@@ -69,4 +71,20 @@ public sealed class SfuOptions
     public string? ApiSecret { get; set; }
     public string? RoomCreateUrl { get; set; }
     public string? RoomCloseUrl { get; set; }
+
+    /// <summary>STUN/TURN URLs через запятую. Для P2P WebRTC на DEV достаточно публичного STUN.</summary>
+    public string IceServers { get; set; } = "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302";
+
+    public const string SignalingHubPath = "/api/v1/consultations/hub";
+
+    public IReadOnlyList<IceServerDto> GetIceServers()
+    {
+        if (string.IsNullOrWhiteSpace(IceServers))
+            return Array.Empty<IceServerDto>();
+
+        return IceServers
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(url => new IceServerDto { Urls = url })
+            .ToList();
+    }
 }

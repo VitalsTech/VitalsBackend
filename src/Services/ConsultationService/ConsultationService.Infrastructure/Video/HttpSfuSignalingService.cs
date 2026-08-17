@@ -48,12 +48,24 @@ public sealed class HttpSfuSignalingService : ISfuSignalingService
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("SFU provider returned empty room payload.");
 
-        return new VideoRoomResponse
+        return VideoRoomMapper.ApplyCommon(new VideoRoomResponse
         {
             RoomId = payload.RoomId ?? $"room-{sessionId:N}",
             ServerUrl = payload.ServerUrl ?? _options.ServerUrl,
             AccessToken = payload.AccessToken ?? string.Empty
-        };
+        }, _options, "sfu");
+    }
+
+    public async Task<VideoRoomResponse> IssueCredentialsAsync(
+        Guid sessionId,
+        Guid participantId,
+        string role,
+        CancellationToken cancellationToken = default)
+    {
+        var room = await CreateRoomAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        room.Role = role;
+        _ = participantId;
+        return room;
     }
 
     public async Task CloseRoomAsync(string roomId, CancellationToken cancellationToken = default)

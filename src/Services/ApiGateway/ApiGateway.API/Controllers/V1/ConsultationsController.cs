@@ -219,6 +219,33 @@ public sealed class ConsultationsController : GatewayControllerBase
     public Task<IActionResult> StartVideo(Guid sessionId, CancellationToken cancellationToken) =>
         Forward(_backend.ForwardAsync("consultation", HttpMethod.Post, $"api/consultations/{sessionId}/video/start", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
 
+    [HttpGet("{sessionId:guid}/video")]
+    public Task<IActionResult> GetVideo(Guid sessionId, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardAsync("consultation", HttpMethod.Get, $"api/consultations/{sessionId}/video", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
+
+    [HttpPost("{sessionId:guid}/video/stop")]
+    public Task<IActionResult> StopVideo(Guid sessionId, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardAsync("consultation", HttpMethod.Post, $"api/consultations/{sessionId}/video/stop", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
+
+    [HttpGet("{sessionId:guid}/clinical")]
+    public Task<IActionResult> ListClinical(Guid sessionId, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardAsync("consultation", HttpMethod.Get, $"api/consultations/{sessionId}/clinical", ForwardContext, cancellationToken: cancellationToken), cancellationToken);
+
+    [HttpPost("{sessionId:guid}/diagnoses")]
+    [Authorize(Roles = "Doctor")]
+    public Task<IActionResult> AddDiagnosis(Guid sessionId, [FromBody] AddDiagnosisRequestDto request, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardJsonAsync("consultation", HttpMethod.Post, $"api/consultations/{sessionId}/diagnoses", ForwardContext, request, cancellationToken), cancellationToken);
+
+    [HttpPost("{sessionId:guid}/prescriptions")]
+    [Authorize(Roles = "Doctor")]
+    public Task<IActionResult> AddPrescriptions(Guid sessionId, [FromBody] AddPrescriptionsRequestDto request, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardJsonAsync("consultation", HttpMethod.Post, $"api/consultations/{sessionId}/prescriptions", ForwardContext, request, cancellationToken), cancellationToken);
+
+    [HttpPost("{sessionId:guid}/certificates")]
+    [Authorize(Roles = "Doctor")]
+    public Task<IActionResult> IssueCertificate(Guid sessionId, [FromBody] IssueCertificateRequestDto request, CancellationToken cancellationToken) =>
+        Forward(_backend.ForwardJsonAsync("consultation", HttpMethod.Post, $"api/consultations/{sessionId}/certificates", ForwardContext, request, cancellationToken), cancellationToken);
+
     [HttpPost("{sessionId:guid}/emergency")]
     [Authorize(Roles = "Doctor")]
     public Task<IActionResult> Emergency(Guid sessionId, CancellationToken cancellationToken) =>

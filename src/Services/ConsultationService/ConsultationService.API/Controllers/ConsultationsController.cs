@@ -198,6 +198,61 @@ public sealed class ConsultationsController : ControllerBase
         return Ok(await _consultations.StartVideoAsync(sessionId, ids[0], ids, cancellationToken));
     }
 
+    [HttpGet("{sessionId:guid}/video")]
+    public async Task<ActionResult<VideoRoomResponse>> GetVideo(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.JoinVideoAsync(sessionId, ids[0], ids, cancellationToken));
+    }
+
+    [HttpPost("{sessionId:guid}/video/stop")]
+    public async Task<IActionResult> StopVideo(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        await _consultations.StopVideoAsync(sessionId, ids[0], ids, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpGet("{sessionId:guid}/clinical")]
+    public async Task<ActionResult<ClinicalActionsResponse>> ListClinical(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.ListClinicalActionsAsync(sessionId, ids[0], ids, cancellationToken));
+    }
+
+    [HttpPost("{sessionId:guid}/diagnoses")]
+    [Authorize(Roles = "Doctor")]
+    public async Task<ActionResult<ClinicalActionDto>> AddDiagnosis(
+        Guid sessionId,
+        [FromBody] AddDiagnosisRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.AddDiagnosisAsync(sessionId, ids[0], request, ids, cancellationToken));
+    }
+
+    [HttpPost("{sessionId:guid}/prescriptions")]
+    [Authorize(Roles = "Doctor")]
+    public async Task<ActionResult<ClinicalActionDto>> AddPrescriptions(
+        Guid sessionId,
+        [FromBody] AddPrescriptionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.AddPrescriptionsAsync(sessionId, ids[0], request, ids, cancellationToken));
+    }
+
+    [HttpPost("{sessionId:guid}/certificates")]
+    [Authorize(Roles = "Doctor")]
+    public async Task<ActionResult<ClinicalActionDto>> IssueCertificate(
+        Guid sessionId,
+        [FromBody] IssueCertificateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ids = UserClaims.GetIdentityIds(User);
+        return Ok(await _consultations.IssueCertificateAsync(sessionId, ids[0], request, ids, cancellationToken));
+    }
+
     [HttpPost("{sessionId:guid}/emergency")]
     [Authorize(Roles = "Doctor")]
     public async Task<IActionResult> Emergency(Guid sessionId, CancellationToken cancellationToken)

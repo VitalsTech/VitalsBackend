@@ -13,6 +13,7 @@ public sealed class ConsultationDbContext : DbContext
     public DbSet<ConsultationMessage> Messages => Set<ConsultationMessage>();
     public DbSet<SessionStatusTransition> StatusTransitions => Set<SessionStatusTransition>();
     public DbSet<SessionParticipant> Participants => Set<SessionParticipant>();
+    public DbSet<ConsultationClinicalAction> ClinicalActions => Set<ConsultationClinicalAction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +58,16 @@ public sealed class ConsultationDbContext : DbContext
             entity.ToTable("session_participants");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.SessionId, x.UserId });
+        });
+
+        modelBuilder.Entity<ConsultationClinicalAction>(entity =>
+        {
+            entity.ToTable("consultation_clinical_actions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(32);
+            entity.Property(x => x.PayloadJson).HasColumnType("jsonb");
+            entity.HasIndex(x => x.SessionId);
+            entity.HasIndex(x => x.CreatedAt);
         });
     }
 }

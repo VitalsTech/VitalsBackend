@@ -268,7 +268,7 @@ curl -s "$GATEWAY/api/v1/lab-orders/patients/$PATIENT_ID" -H "Authorization: Bea
 
 - Реальная аптека / ЕГИСЗ / ESIA / оплата.
 - Push/SMS (Integration — log-stub); in-app history можно показать.
-- Видео SFU (stub).
+- Запись видео / screen share / TURN за строгим NAT (базовое видео — [Frontend-TZ-Video.md](Frontend-TZ-Video.md)).
 - Badge непрочитанных уведомлений без `PATCH .../read`.
 - Авто-создание lab-orders без назначенного врача (нужен doctorId).
 
@@ -280,3 +280,4 @@ curl -s "$GATEWAY/api/v1/lab-orders/patients/$PATIENT_ID" -H "Authorization: Bea
 - Routing: `docs/RoutingService.md`
 - Prescriptions + lab-orders: `docs/PrescriptionService.md`
 - Consultations / book / calendar: `docs/ApiGateway.md`, `docs/ConsultationService.md`
+- Видео-консультации: `docs/Frontend-TZ-Video.md`

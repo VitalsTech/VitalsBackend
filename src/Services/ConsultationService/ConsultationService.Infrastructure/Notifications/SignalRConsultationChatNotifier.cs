@@ -28,4 +28,27 @@ public sealed class SignalRConsultationChatNotifier : IConsultationChatNotifier
             "messagesRead",
             new { sessionId, readerRole = readerRole.ToString(), readAt, lastSequence },
             cancellationToken);
+
+    public Task NotifyVideoStartedAsync(Guid sessionId, VideoRoomResponse room, CancellationToken cancellationToken = default) =>
+        _hub.Clients.Group(sessionId.ToString()).SendAsync(
+            "videoStarted",
+            new
+            {
+                sessionId,
+                mode = room.Mode,
+                roomId = room.RoomId,
+                signalingHub = room.SignalingHub,
+                chatAvailable = room.ChatAvailable,
+                iceServers = room.IceServers
+            },
+            cancellationToken);
+
+    public Task NotifyVideoStoppedAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        _hub.Clients.Group(sessionId.ToString()).SendAsync(
+            "videoStopped",
+            new { sessionId },
+            cancellationToken);
+
+    public Task NotifyClinicalActionAsync(Guid sessionId, ClinicalActionDto action, CancellationToken cancellationToken = default) =>
+        _hub.Clients.Group(sessionId.ToString()).SendAsync("clinicalAction", action, cancellationToken);
 }

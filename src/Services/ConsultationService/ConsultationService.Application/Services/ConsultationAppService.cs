@@ -22,6 +22,7 @@ public sealed class ConsultationAppService : IConsultationService
     private readonly IRoutingClient _routing;
     private readonly IConsultationEventPublisher _publisher;
     private readonly ISfuSignalingService _sfu;
+    private readonly IClinicalActionRepository _clinicalActions;
     private readonly IConsultationChatNotifier _notifier;
     private readonly IESignatureProvider _signature;
     private readonly KafkaOptions _kafka;
@@ -38,6 +39,7 @@ public sealed class ConsultationAppService : IConsultationService
         IRoutingClient routing,
         IConsultationEventPublisher publisher,
         ISfuSignalingService sfu,
+        IClinicalActionRepository clinicalActions,
         IConsultationChatNotifier notifier,
         IESignatureProvider signature,
         IOptions<KafkaOptions> kafka,
@@ -53,6 +55,7 @@ public sealed class ConsultationAppService : IConsultationService
         _routing = routing;
         _publisher = publisher;
         _sfu = sfu;
+        _clinicalActions = clinicalActions;
         _notifier = notifier;
         _signature = signature;
         _kafka = kafka.Value;
@@ -669,17 +672,221 @@ public sealed class ConsultationAppService : IConsultationService
 
         EnsureNotTerminal(session);
 
-        if (string.IsNullOrEmpty(session.VideoRoomId))
+        var startedNow = string.IsNullOrEmpty(session.VideoRoomId);
+        if (startedNow)
         {
-            var room = await _sfu.CreateRoomAsync(sessionId, cancellationToken);
-            session.VideoRoomId = room.RoomId;
+            var created = await _sfu.CreateRoomAsync(sessionId, cancellationToken);
+            session.VideoRoomId = created.RoomId;
             session.Type = ConsultationType.Video;
             await _sessions.SaveSessionAsync(session, cancellationToken);
-            await SendSystemMessageAsync(session, "Видеоконсультация начата.", cancellationToken);
-            return room;
+            await SendSystemMessageAsync(session, "Видеоконсультация начата. Чат консультации остаётся доступен.", cancellationToken);
+            await _notifier.NotifyVideoStartedAsync(sessionId, created, cancellationToken);
         }
 
-        return await _sfu.CreateRoomAsync(sessionId, cancellationToken);
+        return await IssueVideoCredentialsAsync(session, userId, ids, cancellationToken);
+    }
+
+    public async Task<VideoRoomResponse> JoinVideoAsync(
+        Guid sessionId,
+        Guid userId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
+
+        var ids = NormalizeIds(userId, identityIds);
+        if (!ids.Contains(session.PatientId) && !ids.Contains(session.DoctorId))
+            throw new UnauthorizedAccessException("Not a session participant.");
+
+        EnsureNotTerminal(session);
+
+        if (string.IsNullOrEmpty(session.VideoRoomId))
+            throw new InvalidOperationException("Video is not active.");
+
+        return await IssueVideoCredentialsAsync(session, userId, ids, cancellationToken);
+    }
+
+    public async Task StopVideoAsync(
+        Guid sessionId,
+        Guid userId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdForUpdateAsync(sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
+
+        var ids = NormalizeIds(userId, identityIds);
+        if (!ids.Contains(session.PatientId) && !ids.Contains(session.DoctorId))
+            throw new UnauthorizedAccessException("Not a session participant.");
+
+        EnsureNotTerminal(session);
+
+        if (string.IsNullOrEmpty(session.VideoRoomId))
+            return;
+
+        var roomId = session.VideoRoomId;
+        session.VideoRoomId = null;
+        await _sessions.SaveSessionAsync(session, cancellationToken);
+        await _sfu.CloseRoomAsync(roomId, cancellationToken);
+        await SendSystemMessageAsync(session, "Видеоконсультация завершена. Чат консультации доступен.", cancellationToken);
+        await _notifier.NotifyVideoStoppedAsync(sessionId, cancellationToken);
+    }
+
+    public async Task<ClinicalActionDto> AddDiagnosisAsync(
+        Guid sessionId,
+        Guid doctorId,
+        AddDiagnosisRequest request,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
+        var icd10 = request.Icd10?.Trim() ?? string.Empty;
+        var text = request.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(icd10) && string.IsNullOrWhiteSpace(text))
+            throw new InvalidOperationException("Diagnosis code or text is required.");
+
+        await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "DiagnosisConfirmed", new
+        {
+            icd10Code = icd10,
+            description = string.IsNullOrWhiteSpace(text) ? icd10 : text,
+            source = "consultation-live",
+            consultationSessionId = session.Id
+        }, session.Id, cancellationToken);
+
+        var payload = new { icd10, text };
+        var label = string.IsNullOrWhiteSpace(icd10) ? text : $"{icd10} {text}".Trim();
+        return await PersistClinicalAsync(
+            session,
+            doctorId,
+            ClinicalActionKind.Diagnosis,
+            payload,
+            $"Врач поставил диагноз: {label}",
+            cancellationToken);
+    }
+
+    public async Task<ClinicalActionDto> AddPrescriptionsAsync(
+        Guid sessionId,
+        Guid doctorId,
+        AddPrescriptionsRequest request,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
+        var lines = (request.Lines ?? Array.Empty<string>())
+            .Select(l => l?.Trim())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Cast<string>()
+            .ToList();
+
+        if (lines.Count == 0)
+            throw new InvalidOperationException("At least one prescription line is required.");
+
+        await _prescriptions.CreateFromConsultationAsync(
+            session.PatientId,
+            session.DoctorId,
+            session.Id,
+            diagnosis: null,
+            lines,
+            cancellationToken);
+
+        return await PersistClinicalAsync(
+            session,
+            doctorId,
+            ClinicalActionKind.Prescription,
+            new { lines },
+            $"Врач выписал рецепт: {string.Join("; ", lines)}",
+            cancellationToken);
+    }
+
+    public async Task<ClinicalActionDto> IssueCertificateAsync(
+        Guid sessionId,
+        Guid doctorId,
+        IssueCertificateRequest request,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await RequireDoctorSessionAsync(sessionId, doctorId, cancellationToken, identityIds);
+        var type = string.IsNullOrWhiteSpace(request.Type) ? "HealthStatus" : request.Type.Trim();
+        var title = request.Title?.Trim() ?? string.Empty;
+        var body = request.Body?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(body))
+            throw new InvalidOperationException("Certificate title and body are required.");
+
+        DateTime? validFrom = request.ValidFrom.HasValue ? ToUtc(request.ValidFrom.Value) : null;
+        DateTime? validUntil = request.ValidUntil.HasValue ? ToUtc(request.ValidUntil.Value) : null;
+
+        await _medicalRecord.AppendConsultationEventAsync(session.PatientId, "MedicalCertificateIssued", new
+        {
+            type,
+            title,
+            body,
+            validFrom,
+            validUntil,
+            source = "consultation-live",
+            consultationSessionId = session.Id,
+            doctorId = session.DoctorId
+        }, session.Id, cancellationToken);
+
+        return await PersistClinicalAsync(
+            session,
+            doctorId,
+            ClinicalActionKind.Certificate,
+            new { type, title, body, validFrom, validUntil },
+            $"Врач выдал справку: {title}",
+            cancellationToken);
+    }
+
+    public async Task<ClinicalActionsResponse> ListClinicalActionsAsync(
+        Guid sessionId,
+        Guid userId,
+        IReadOnlyList<Guid>? identityIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Session {sessionId} not found.");
+
+        var ids = NormalizeIds(userId, identityIds);
+        if (!ids.Contains(session.PatientId) && !ids.Contains(session.DoctorId))
+            throw new UnauthorizedAccessException("Not a session participant.");
+
+        var items = await _clinicalActions.ListBySessionAsync(sessionId, cancellationToken);
+        return new ClinicalActionsResponse { Items = items.Select(MapClinical).ToList() };
+    }
+
+    private async Task<VideoRoomResponse> IssueVideoCredentialsAsync(
+        ConsultationSession session,
+        Guid userId,
+        IReadOnlyList<Guid> identityIds,
+        CancellationToken cancellationToken)
+    {
+        var role = identityIds.Contains(session.DoctorId) ? "Doctor" : "Patient";
+        return await _sfu.IssueCredentialsAsync(session.Id, userId, role, cancellationToken);
+    }
+
+    private async Task<ClinicalActionDto> PersistClinicalAsync(
+        ConsultationSession session,
+        Guid doctorId,
+        string kind,
+        object payload,
+        string chatText,
+        CancellationToken cancellationToken)
+    {
+        var action = new ConsultationClinicalAction
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Kind = kind,
+            PayloadJson = JsonSerializer.Serialize(payload),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByDoctorId = doctorId
+        };
+
+        await _clinicalActions.AddAsync(action, cancellationToken);
+        var dto = MapClinical(action);
+        await SendSystemMessageAsync(session, chatText, cancellationToken);
+        await _notifier.NotifyClinicalActionAsync(session.Id, dto, cancellationToken);
+        return dto;
     }
 
     public async Task TriggerEmergencyAsync(Guid sessionId, Guid doctorId, CancellationToken cancellationToken = default)
@@ -964,6 +1171,7 @@ public sealed class ConsultationAppService : IConsultationService
         PatientUnreadCount = session.PatientUnreadCount,
         DoctorUnreadCount = session.DoctorUnreadCount,
         VideoRoomId = session.VideoRoomId,
+        VideoActive = !string.IsNullOrEmpty(session.VideoRoomId),
         Protocol = TryReadProtocol(session.ProtocolJson),
         ProtocolSignature = session.ProtocolSignature,
         HasProtocol = HasStoredProtocol(session.ProtocolJson)
@@ -1014,4 +1222,28 @@ public sealed class ConsultationAppService : IConsultationService
         SentAt = message.SentAt,
         ReadAt = message.ReadAt
     };
+
+    private static ClinicalActionDto MapClinical(ConsultationClinicalAction action)
+    {
+        JsonElement payload;
+        try
+        {
+            payload = string.IsNullOrWhiteSpace(action.PayloadJson)
+                ? JsonSerializer.SerializeToElement(new { })
+                : JsonSerializer.Deserialize<JsonElement>(action.PayloadJson);
+        }
+        catch (JsonException)
+        {
+            payload = JsonSerializer.SerializeToElement(new { });
+        }
+
+        return new ClinicalActionDto
+        {
+            Id = action.Id,
+            Kind = action.Kind,
+            CreatedAt = action.CreatedAt,
+            CreatedByDoctorId = action.CreatedByDoctorId,
+            Payload = payload
+        };
+    }
 }

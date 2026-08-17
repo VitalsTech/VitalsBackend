@@ -99,7 +99,7 @@
 | --- | --- | --- | --- |
 | Kafka consumer | `RoutingDecisionConsumerHostedService` | Confluent consumer `routing.decision` | `Kafka:Enabled: false` |
 | Kafka publisher | `KafkaConsultationEventPublisher` | Confluent producer | `Kafka:Enabled: false` |
-| SFU / WebRTC | `LiveKitSfuSignalingService`, `HttpSfuSignalingService`, `StubSfuSignalingService` | LiveKit Room API или generic HTTP SFU; stub по умолчанию | `Sfu:UseStub: true` |
+| SFU / WebRTC | `LiveKitSfuSignalingService`, `HttpSfuSignalingService`, `StubSfuSignalingService` | По умолчанию **P2P WebRTC** (`mode: p2p`, STUN + SignalR). LiveKit/HTTP при `Sfu:UseStub: false` | `Sfu:UseStub: true` |
 | Redis hot state | `InMemorySessionStateStore` | Статус/unread **логируются**, персистентность в PostgreSQL | `Redis:Enabled: false` |
 | Напоминания push/SMS | — | Только `SessionTimeoutHostedService` (expire scan) | — |
 | JWT validation | `AddVitalsAuthentication` | См. Medical Record | `Jwt:JwksUrl` |
@@ -254,6 +254,7 @@ Auth:
 - [MedicalRecordService](MedicalRecordService.md) — Kafka
 - [AITriageService](AITriageService.md) — NER/LLM/Kafka
 - [RoutingService](RoutingService.md) — scheduler, Kafka, Redis
-- [ConsultationService](ConsultationService.md) — SFU, SignalR, Kafka
+- [ConsultationService](ConsultationService.md) — WebRTC P2P / SFU, SignalR, Kafka
+- [Frontend-TZ-Video.md](Frontend-TZ-Video.md) — ТЗ фронта видео-консультаций
 - [PrescriptionService](PrescriptionService.md) — validation, e-sign, pharmacy stub
 - [NotificationService](NotificationService.md) — channels, templates, Kafka

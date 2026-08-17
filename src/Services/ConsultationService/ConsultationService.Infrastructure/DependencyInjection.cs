@@ -44,6 +44,7 @@ public static class DependencyInjection
 
         services.AddScoped<IConsultationRepository, ConsultationRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
+        services.AddScoped<IClinicalActionRepository, ClinicalActionRepository>();
         services.AddScoped<IConsultationService, ConsultationAppService>();
         services.AddSingleton<ISessionStateStore, InMemorySessionStateStore>();
         services.AddSingleton<IConsultationEventPublisher, KafkaConsultationEventPublisher>();
