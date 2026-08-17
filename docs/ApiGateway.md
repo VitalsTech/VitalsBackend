@@ -9,6 +9,7 @@
 | Контроллер | Путь | Backend |
 |------------|------|---------|
 | Auth | `/api/v1/auth/*` | AuthService |
+| Esia | `/api/v1/auth/esia/*` | AuthService (DEV: заглушка, не портал ЕСИА) |
 | Users | `/api/v1/users/*` | UserService |
 | Admin | `/api/v1/admin/*` | UserService |
 | AdminRoles | `/api/v1/admin/roles/*` | UserService |
@@ -24,7 +25,6 @@
 
 | Путь | Назначение |
 |------|------------|
-| `/api/v1/auth/esia/*` | OAuth ESIA (редиректы AuthService) |
 | `/api/v1/consultations/hub/*` | SignalR WebSocket |
 
 ## Middleware (порядок)

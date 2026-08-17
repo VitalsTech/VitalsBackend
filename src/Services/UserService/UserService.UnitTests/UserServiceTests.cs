@@ -55,6 +55,62 @@ public class MultiProfileUserServiceTests
     }
 
     [Fact]
+    public async Task ApplyEsiaProfileAsync_updates_name_oms_and_residence_address()
+    {
+        var userRepository = new InMemoryUserRepository();
+        var user = CreateUser("89000936941", "patient@example.com", "Old", "Name");
+        await userRepository.AddUserAsync(user);
+        var profile = new Profile { UserId = user.Id, ProfileType = ProfileType.Patient, IsActive = true };
+        profile.PatientProfile = new PatientProfile { Id = profile.Id };
+        await userRepository.AddProfileAsync(profile);
+
+        var service = CreateMultiProfileService(userRepository);
+        await service.ApplyEsiaProfileAsync(user.PublicId, new ApplyEsiaProfileRequest
+        {
+            FirstName = "Иван",
+            Surename = "Иванов",
+            SecondName = "Иванович",
+            SNILS = "12345678901",
+            InsuranceNumber = "1234567890123456",
+            ResidenceAddress = new AddressDto { City = "Москва", Street = "Тверская", House = "1" }
+        });
+
+        var result = await service.GetUserWithProfilesAsync(user.PublicId);
+        Assert.Equal("Иван", result.FirstName);
+        Assert.Equal("Иванов", result.Surename);
+        var data = Assert.IsType<PatientProfileData>(result.Profiles.Single().Data);
+        Assert.Equal("1234567890123456", data.InsuranceNumber);
+        Assert.Equal("Москва", data.ResidenceAddress?.City);
+        Assert.Equal("Тверская", data.ResidenceAddress?.Street);
+    }
+
+    [Fact]
+    public async Task ApplyEsiaProfileAsync_without_identity_keeps_name_and_birth_date()
+    {
+        var userRepository = new InMemoryUserRepository();
+        var user = CreateUser("89000936941", "patient@example.com", "Old", "Name");
+        await userRepository.AddUserAsync(user);
+        var profile = new Profile { UserId = user.Id, ProfileType = ProfileType.Patient, IsActive = true };
+        profile.PatientProfile = new PatientProfile { Id = profile.Id };
+        await userRepository.AddProfileAsync(profile);
+
+        var service = CreateMultiProfileService(userRepository);
+        await service.ApplyEsiaProfileAsync(user.PublicId, new ApplyEsiaProfileRequest
+        {
+            InsuranceNumber = "7779000936941000",
+            ResidenceAddress = new AddressDto { City = "Москва", Street = "Арбат", House = "2" }
+        });
+
+        var result = await service.GetUserWithProfilesAsync(user.PublicId);
+        Assert.Equal("Old", result.FirstName);
+        Assert.Equal("Name", result.Surename);
+        Assert.Equal(new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc), result.BirthDate);
+        var data = Assert.IsType<PatientProfileData>(result.Profiles.Single().Data);
+        Assert.Equal("7779000936941000", data.InsuranceNumber);
+        Assert.Equal("Арбат", data.ResidenceAddress?.Street);
+    }
+
+    [Fact]
     public async Task AddProfileToUserAsync_rejects_doctor_profile_via_self_service()
     {
         var userRepository = new InMemoryUserRepository();
@@ -396,6 +452,9 @@ internal sealed class NullMultiProfileUserService : IMultiProfileUserService
         => throw new NotSupportedException();
 
     public Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request)
+        => throw new NotSupportedException();
+
+    public Task<UserWithProfilesDto> ApplyEsiaProfileAsync(Guid userPublicId, ApplyEsiaProfileRequest request)
         => throw new NotSupportedException();
 
     public Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id)

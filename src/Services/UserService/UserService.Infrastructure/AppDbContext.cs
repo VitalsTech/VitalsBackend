@@ -109,6 +109,8 @@ namespace UserService.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<OrganizationProfile>().OwnsOne(op => op.LegalAddress);
+            modelBuilder.Entity<PatientProfile>().OwnsOne(pp => pp.ResidenceAddress);
+            modelBuilder.Entity<PatientProfile>().OwnsOne(pp => pp.RegistrationAddress);
 
             modelBuilder.Entity<User>()
                 .Property(u => u.Sex)

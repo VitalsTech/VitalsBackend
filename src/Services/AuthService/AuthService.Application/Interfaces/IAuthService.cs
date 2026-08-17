@@ -11,7 +11,11 @@ public interface IAuthenticationService
     Task ChangePasswordAsync(Guid userPublicId, ChangePasswordRequest request, CancellationToken cancellationToken = default);
     Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default);
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
-    Task<TokenPairResponse> CompleteEsiaLoginAsync(string code, string? ipAddress, string? deviceFingerprint, CancellationToken cancellationToken = default);
-    Task LinkEsiaAsync(Guid userPublicId, string code, string currentPassword, CancellationToken cancellationToken = default);
+    Task<TokenPairResponse> CompleteEsiaStubRegisterAsync(EsiaStubRegisterRequest request, string? ipAddress, string? deviceFingerprint, CancellationToken cancellationToken = default);
+    Task<TokenPairResponse> LinkEsiaStubAsync(Guid userPublicId, string? ipAddress, CancellationToken cancellationToken = default);
+    Task<TokenPairResponse> CompleteEsiaLoginAsync(string code, string? ipAddress, string? deviceFingerprint, string? state = null, CancellationToken cancellationToken = default);
+    Task LinkEsiaAsync(Guid userPublicId, string code, string? currentPassword, string? state = null, CancellationToken cancellationToken = default);
+    Task<TokenPairResponse> CompleteEsiaSessionAsync(EsiaAuthSession session, string code, string? ipAddress, CancellationToken cancellationToken = default);
+    Task<EsiaStatusResponse> GetEsiaStatusAsync(Guid userPublicId, CancellationToken cancellationToken = default);
     Task<TokenPairResponse> SwitchProfileAsync(Guid userPublicId, SwitchProfileRequest request, string? ipAddress, CancellationToken cancellationToken = default);
 }

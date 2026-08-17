@@ -57,6 +57,7 @@ namespace UserService.API
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 dbContext.Database.Migrate();
+                PatientAddressSchema.EnsureColumns(dbContext);
             }
 
             await DoctorScheduleSeeder.SeedAsync(app.Services);

@@ -88,6 +88,18 @@ services:
     build:
       context: ./src
       dockerfile: Services/AuthService/AuthService.API/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:80
+      Esia__Enabled: ${ESIA_ENABLED:-true}
+      Esia__UseStub: ${ESIA_USE_STUB:-true}
+      Esia__ClientId: ${ESIA_CLIENT_ID:-}
+      Esia__RedirectUri: ${ESIA_REDIRECT_URI:-http://localhost:5080/api/v1/auth/esia/callback}
+      Esia__CertificatePath: ${ESIA_CERT_PATH:-/certs/esia.pfx}
+      Esia__CertificatePassword: ${ESIA_CERT_PASSWORD:-}
+      Esia__CertificateHash: ${ESIA_CERT_HASH:-}
+    volumes:
+      - ./certs:/certs:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -38,9 +38,13 @@ Claims access-токена: `sub` (PublicId), `role`, `scope` (права из U
 | POST  | `/change-password` | JWT + старый/новый пароль                          |
 | POST  | `/password/forgot` | Код сброса (пока логируется, SMS/email — заглушка) |
 | POST  | `/password/reset`  | Сброс по коду                                      |
-| GET   | `/esia/login`      | URL авторизации ЕСИА                               |
-| GET   | `/esia/callback`   | Callback ЕСИА → JWT                                |
-| POST  | `/esia/link`       | Привязка ЕСИА к аккаунту (JWT + пароль)            |
+| GET   | `/esia/config`     | Включена ли ЕСИА, портал, что импортируется        |
+| GET   | `/esia/start`      | URL авторизации (`intent=register\|link`)          |
+| GET   | `/esia/login`      | Алиас `start?intent=register`                      |
+| GET   | `/esia/callback`   | Callback ЕСИА → JWT или редирект на returnUrl      |
+| GET   | `/esia/status`     | JWT: привязан ли аккаунт                           |
+| POST  | `/esia/complete`   | Обмен code+state (если клиент сам поймал code)     |
+| POST  | `/esia/link`       | Привязка по code (JWT; пароль необязателен)        |
 
 
 ## Внутренние эндпоинты (`/internal`)
@@ -81,5 +85,5 @@ Swagger: [http://localhost:5200/swagger](http://localhost:5200/swagger)
 ## Конфигурация
 
 - `Jwt` — issuer, audience, RSA PEM (в dev ключ генерируется при старте, если PEM не задан)
-- `Esia:Enabled` — `false` по умолчанию; для прода заполнить `ClientId`, `ClientSecret`, `RedirectUri`, `UserInfoEndpoint`
+- `Esia:Enabled` — в `appsettings.json` `false` (prod). На **DEV** (`UseStub: true`) живого портала нет: форма ФИО/почта/телефон, ОМС и адрес генерируются, аккаунты склеиваются по телефону. Production не включится без `Esia:AllowProduction`. Клиники/врачи — нет.
 

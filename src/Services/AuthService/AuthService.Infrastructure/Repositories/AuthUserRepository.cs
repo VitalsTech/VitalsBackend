@@ -22,7 +22,9 @@ public sealed class AuthUserRepository : IAuthUserRepository
             .FirstOrDefaultAsync(x => x.NormalizedPhone == normalizedPhone, cancellationToken);
 
     public Task<AuthUser?> GetByUserPublicIdAsync(Guid userPublicId, CancellationToken cancellationToken = default) =>
-        _db.AuthUsers.FirstOrDefaultAsync(x => x.UserPublicId == userPublicId, cancellationToken);
+        _db.AuthUsers
+            .Include(x => x.EsiaLink)
+            .FirstOrDefaultAsync(x => x.UserPublicId == userPublicId, cancellationToken);
 
     public Task<AuthUser?> GetByEsiaSubjectIdAsync(string esiaSubjectId, CancellationToken cancellationToken = default) =>
         _db.AuthUsers

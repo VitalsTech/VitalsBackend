@@ -16,6 +16,7 @@ public static class MedicalEventTypes
     public const string AllergyRecorded = "AllergyRecorded";
     public const string VitalSignRecorded = "VitalSignRecorded";
     public const string ImmunizationRecorded = "ImmunizationRecorded";
+    public const string EsiaImported = "EsiaImported";
     public const string DocumentUploaded = "DocumentUploaded";
     public const string MoodCheck = "mood_check";
 
@@ -47,6 +48,7 @@ public static class MedicalEventTypes
         VitalSignRecorded,
         ImmunizationRecorded,
         DocumentUploaded,
+        EsiaImported,
         MoodCheck,
         ConsultationStarted,
         ConsultationJoined,

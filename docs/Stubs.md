@@ -39,7 +39,7 @@
 | Заглушка | Класс / файл | Описание | Конфиг |
 | --- | --- | --- | --- |
 | SMS / Email для сброса пароля | `AuthenticationService` | Код сброса **только логируется**, не отправляется | `POST /api/auth/password/forgot` |
-| ЕСИА (OAuth) | `EsiaOAuthService`, `EsiaController` | Код готов, но **`Esia:Enabled: false`** по умолчанию; без credentials → 503 | `Esia:ClientId`, `ClientSecret`, `RedirectUri`, `UserInfoEndpoint` |
+| ЕСИА | `EsiaOAuthService`, `EsiaController` | **DEV:** заглушка (`UseStub`): форма ФИО/email/телефон, ОМС/адрес генерируются, один аккаунт на телефон. Prod выключен. | `Esia:Enabled`, `UseStub` |
 | Ephemeral RSA signing key | `RsaKeyProvider` | Если `Jwt:RsaPrivateKeyPem` не задан, ключ **генерируется при каждом старте** | `Jwt:RsaPrivateKeyPem` в prod |
 
 ---
@@ -242,7 +242,7 @@ Routing:
 Auth:
 
 ```json
-"Esia": { "Enabled": false }
+"Esia": { "Enabled": false, "UseStub": false }
 ```
 
 ---

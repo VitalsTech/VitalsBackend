@@ -1,4 +1,5 @@
 using AuthService.Application.DTOs;
+using AuthService.Application.Esia;
 using AuthService.Application.Exceptions;
 using AuthService.Application.Helpers;
 using AuthService.Application.Interfaces;
@@ -19,6 +20,7 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IUserServiceClient _userServiceClient;
     private readonly IEsiaOAuthService _esiaOAuthService;
+    private readonly IMedicalRecordEventClient _medicalRecord;
     private readonly JwtOptions _jwtOptions;
     private readonly ILogger<AuthenticationService> _logger;
 
@@ -30,6 +32,7 @@ public sealed class AuthenticationService : IAuthenticationService
         IJwtTokenService jwtTokenService,
         IUserServiceClient userServiceClient,
         IEsiaOAuthService esiaOAuthService,
+        IMedicalRecordEventClient medicalRecord,
         IOptions<JwtOptions> jwtOptions,
         ILogger<AuthenticationService> logger)
     {
@@ -40,6 +43,7 @@ public sealed class AuthenticationService : IAuthenticationService
         _jwtTokenService = jwtTokenService;
         _userServiceClient = userServiceClient;
         _esiaOAuthService = esiaOAuthService;
+        _medicalRecord = medicalRecord;
         _jwtOptions = jwtOptions.Value;
         _logger = logger;
     }
@@ -218,47 +222,204 @@ public sealed class AuthenticationService : IAuthenticationService
         await _authUsers.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<TokenPairResponse> CompleteEsiaLoginAsync(
-        string code,
+    public async Task<TokenPairResponse> CompleteEsiaStubRegisterAsync(
+        EsiaStubRegisterRequest request,
         string? ipAddress,
         string? deviceFingerprint,
         CancellationToken cancellationToken = default)
     {
-        var esiaUser = await _esiaOAuthService.ExchangeCodeAsync(code, cancellationToken);
+        if (!_esiaOAuthService.UseStub)
+            throw new EsiaNotConfiguredException();
+
+        ValidateStubRegister(request);
+        var phone = PhoneNormalizer.Normalize(request.PhoneNumber);
+        var existed = await _authUsers.GetByPhoneAsync(phone, cancellationToken) is not null
+                      || await _authUsers.GetByEsiaSubjectIdAsync(
+                          EsiaStubProfileFactory.SubjectIdForPhone(phone), cancellationToken) is not null;
+
+        var esiaUser = existed
+            ? EsiaStubProfileFactory.ForExistingAccount(phone)
+            : EsiaStubProfileFactory.ForRegister(
+                request.LastName, request.FirstName, request.MiddleName, request.Email, request.PhoneNumber);
+
+        var authUser = await FindOrCreateUserForEsiaAsync(
+            esiaUser, cancellationToken, EsiaStubProfileFactory.DevPassword);
+        EnsureNotBlocked(authUser);
+        var tokens = await IssueTokenPairAsync(authUser, ipAddress, deviceFingerprint, cancellationToken);
+        tokens.Esia = await SyncEsiaProfileAsync(authUser, esiaUser, cancellationToken);
+        tokens.Esia.ExistingAccount = existed;
+        tokens.Esia.DevPassword = existed ? null : EsiaStubProfileFactory.DevPassword;
+        return tokens;
+    }
+
+    public async Task<TokenPairResponse> LinkEsiaStubAsync(
+        Guid userPublicId,
+        string? ipAddress,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_esiaOAuthService.UseStub)
+            throw new EsiaNotConfiguredException();
+
+        var authUser = await _authUsers.GetByUserPublicIdAsync(userPublicId, cancellationToken)
+            ?? throw new InvalidCredentialsException();
+        EnsureNotBlocked(authUser);
+
+        var esiaUser = EsiaStubProfileFactory.ForLink(authUser.NormalizedPhone);
+        await AttachEsiaLinkAsync(authUser, esiaUser, cancellationToken);
+        var tokens = await IssueTokenPairAsync(authUser, ipAddress, null, cancellationToken);
+        tokens.Esia = await SyncEsiaProfileAsync(authUser, esiaUser, cancellationToken);
+        tokens.Esia.ExistingAccount = true;
+        return tokens;
+    }
+
+    public async Task<TokenPairResponse> CompleteEsiaLoginAsync(
+        string code,
+        string? ipAddress,
+        string? deviceFingerprint,
+        string? state = null,
+        CancellationToken cancellationToken = default)
+    {
+        var esiaUser = await _esiaOAuthService.ExchangeCodeAsync(code, state, cancellationToken);
         var authUser = await FindOrCreateUserForEsiaAsync(esiaUser, cancellationToken);
         EnsureNotBlocked(authUser);
-        return await IssueTokenPairAsync(authUser, ipAddress, deviceFingerprint, cancellationToken);
+        var tokens = await IssueTokenPairAsync(authUser, ipAddress, deviceFingerprint, cancellationToken);
+        tokens.Esia = await SyncEsiaProfileAsync(authUser, esiaUser, cancellationToken);
+        return tokens;
     }
 
     public async Task LinkEsiaAsync(
         Guid userPublicId,
         string code,
-        string currentPassword,
+        string? currentPassword,
+        string? state = null,
         CancellationToken cancellationToken = default)
     {
         var authUser = await _authUsers.GetByUserPublicIdAsync(userPublicId, cancellationToken)
             ?? throw new InvalidCredentialsException();
 
-        if (!_passwordHasher.Verify(currentPassword, authUser.PasswordHash, authUser.PasswordSalt))
+        if (!string.IsNullOrWhiteSpace(currentPassword) &&
+            !_passwordHasher.Verify(currentPassword, authUser.PasswordHash, authUser.PasswordSalt))
             throw new InvalidCredentialsException();
 
-        var esiaUser = await _esiaOAuthService.ExchangeCodeAsync(code, cancellationToken);
+        var esiaUser = await _esiaOAuthService.ExchangeCodeAsync(code, state, cancellationToken);
+        await AttachEsiaLinkAsync(authUser, esiaUser, cancellationToken);
+        await SyncEsiaProfileAsync(authUser, esiaUser, cancellationToken);
+    }
+
+    public async Task<TokenPairResponse> CompleteEsiaSessionAsync(
+        EsiaAuthSession session,
+        string code,
+        string? ipAddress,
+        CancellationToken cancellationToken = default)
+    {
+        if (session.Intent.Equals("link", StringComparison.OrdinalIgnoreCase))
+        {
+            if (session.UserPublicId is null || session.UserPublicId == Guid.Empty)
+                throw new AuthValidationException("ESIA link requires an authenticated user.");
+
+            var authUser = await _authUsers.GetByUserPublicIdAsync(session.UserPublicId.Value, cancellationToken)
+                ?? throw new InvalidCredentialsException();
+            EnsureNotBlocked(authUser);
+
+            var esiaUser = await _esiaOAuthService.ExchangeCodeAsync(code, session.State, cancellationToken);
+            await AttachEsiaLinkAsync(authUser, esiaUser, cancellationToken);
+            var tokens = await IssueTokenPairAsync(authUser, ipAddress, session.DeviceFingerprint, cancellationToken);
+            tokens.Esia = await SyncEsiaProfileAsync(authUser, esiaUser, cancellationToken);
+            return tokens;
+        }
+
+        return await CompleteEsiaLoginAsync(code, ipAddress, session.DeviceFingerprint, session.State, cancellationToken);
+    }
+
+    public async Task<EsiaStatusResponse> GetEsiaStatusAsync(Guid userPublicId, CancellationToken cancellationToken = default)
+    {
+        var authUser = await _authUsers.GetByUserPublicIdAsync(userPublicId, cancellationToken)
+            ?? throw new InvalidCredentialsException();
+
+        var link = authUser.EsiaLink;
+        return new EsiaStatusResponse
+        {
+            Linked = link is not null,
+            LinkedAt = link?.LinkedAt,
+            SnilsMasked = MaskSnils(link?.Snils)
+        };
+    }
+
+    private async Task AttachEsiaLinkAsync(AuthUser authUser, EsiaUserInfo esiaUser, CancellationToken cancellationToken)
+    {
         var existing = await _authUsers.GetByEsiaSubjectIdAsync(esiaUser.SubjectId, cancellationToken);
         if (existing is not null && existing.Id != authUser.Id)
-            throw new AuthValidationException("This ESIA account is already linked to another user.");
+            throw new AuthValidationException("Этот аккаунт Госуслуг уже привязан к другому пользователю.");
 
-        authUser.EsiaLink = new EsiaLink
+        if (authUser.EsiaLink is null)
         {
-            AuthUserId = authUser.Id,
-            EsiaSubjectId = esiaUser.SubjectId,
-            Snils = esiaUser.Snils,
-            LinkedAt = DateTime.UtcNow
-        };
+            authUser.EsiaLink = new EsiaLink
+            {
+                AuthUserId = authUser.Id,
+                EsiaSubjectId = esiaUser.SubjectId,
+                Snils = esiaUser.Snils,
+                LinkedAt = DateTime.UtcNow
+            };
+        }
+        else
+        {
+            authUser.EsiaLink.EsiaSubjectId = esiaUser.SubjectId;
+            authUser.EsiaLink.Snils = esiaUser.Snils;
+            authUser.EsiaLink.LinkedAt = DateTime.UtcNow;
+        }
 
+        authUser.UpdatedAt = DateTime.UtcNow;
         await _authUsers.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<AuthUser> FindOrCreateUserForEsiaAsync(EsiaUserInfo esiaUser, CancellationToken cancellationToken)
+    private async Task<EsiaSyncResultDto> SyncEsiaProfileAsync(
+        AuthUser authUser,
+        EsiaUserInfo esiaUser,
+        CancellationToken cancellationToken)
+    {
+        var summary = new EsiaSyncResultDto
+        {
+            Linked = true,
+            FullName = string.Join(" ", new[] { esiaUser.LastName, esiaUser.FirstName, esiaUser.MiddleName }
+                .Where(x => !string.IsNullOrWhiteSpace(x))),
+            OmsImported = !string.IsNullOrWhiteSpace(esiaUser.OmsNumber),
+            AddressImported = esiaUser.ResidenceAddress is not null || esiaUser.RegistrationAddress is not null
+        };
+
+        try
+        {
+            await _userServiceClient.ApplyEsiaProfileAsync(authUser.UserPublicId, esiaUser, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to apply ESIA profile to UserService for {UserId}", authUser.UserPublicId);
+        }
+
+        try
+        {
+            await _medicalRecord.ImportEsiaSnapshotAsync(authUser.UserPublicId, esiaUser, cancellationToken);
+            summary.MedicalRecordSnapshotWritten = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write ESIA snapshot to medical record for {UserId}", authUser.UserPublicId);
+        }
+
+        return summary;
+    }
+
+    private static string? MaskSnils(string? snils)
+    {
+        if (string.IsNullOrWhiteSpace(snils))
+            return null;
+        var digits = new string(snils.Where(char.IsDigit).ToArray());
+        return digits.Length < 4 ? "***" : $"***{digits[^4..]}";
+    }
+
+    private async Task<AuthUser> FindOrCreateUserForEsiaAsync(
+        EsiaUserInfo esiaUser,
+        CancellationToken cancellationToken,
+        string? initialPassword = null)
     {
         var byEsia = await _authUsers.GetByEsiaSubjectIdAsync(esiaUser.SubjectId, cancellationToken);
         if (byEsia is not null)
@@ -270,28 +431,52 @@ public sealed class AuthenticationService : IAuthenticationService
             var byPhone = await _authUsers.GetByPhoneAsync(phone, cancellationToken);
             if (byPhone is not null)
             {
-                byPhone.EsiaLink = new EsiaLink
-                {
-                    AuthUserId = byPhone.Id,
-                    EsiaSubjectId = esiaUser.SubjectId,
-                    Snils = esiaUser.Snils
-                };
-                await _authUsers.SaveChangesAsync(cancellationToken);
+                await AttachEsiaLinkAsync(byPhone, esiaUser, cancellationToken);
                 return byPhone;
             }
         }
 
+        var password = string.IsNullOrWhiteSpace(initialPassword)
+            ? Guid.NewGuid().ToString("N") + "Aa1!"
+            : initialPassword;
+
         var registerRequest = new RegisterRequest
         {
-            PhoneNumber = esiaUser.Phone ?? throw new AuthValidationException("ESIA profile does not contain a phone number."),
-            Password = Guid.NewGuid().ToString("N") + "Aa1!",
+            PhoneNumber = esiaUser.Phone ?? throw new AuthValidationException("В профиле Госуслуг нет телефона — добавьте мобильный в ЕСИА и повторите."),
+            Password = password,
             Email = esiaUser.Email,
             FirstName = esiaUser.FirstName ?? "Unknown",
             SecondName = esiaUser.MiddleName,
             Surename = esiaUser.LastName ?? "Unknown",
-            BirthDate = DateTime.UtcNow.Date.AddYears(-30),
-            Sex = "Male",
-            PatientProfile = new { }
+            BirthDate = DateTime.SpecifyKind((esiaUser.BirthDate ?? DateTime.UtcNow.Date.AddYears(-30)).Date, DateTimeKind.Utc),
+            Sex = MapRegisterSex(esiaUser.Gender),
+            PatientProfile = new
+            {
+                snils = NormalizeSnils(esiaUser.Snils),
+                insuranceNumber = esiaUser.OmsNumber,
+                residenceAddress = esiaUser.ResidenceAddress is null ? null : new
+                {
+                    postCode = esiaUser.ResidenceAddress.PostCode,
+                    country = esiaUser.ResidenceAddress.Country,
+                    region = esiaUser.ResidenceAddress.Region,
+                    city = esiaUser.ResidenceAddress.City,
+                    area = esiaUser.ResidenceAddress.Area,
+                    street = esiaUser.ResidenceAddress.Street ?? esiaUser.ResidenceAddress.AddressStr,
+                    house = esiaUser.ResidenceAddress.House,
+                    flat = esiaUser.ResidenceAddress.Flat
+                },
+                registrationAddress = esiaUser.RegistrationAddress is null ? null : new
+                {
+                    postCode = esiaUser.RegistrationAddress.PostCode,
+                    country = esiaUser.RegistrationAddress.Country,
+                    region = esiaUser.RegistrationAddress.Region,
+                    city = esiaUser.RegistrationAddress.City,
+                    area = esiaUser.RegistrationAddress.Area,
+                    street = esiaUser.RegistrationAddress.Street ?? esiaUser.RegistrationAddress.AddressStr,
+                    house = esiaUser.RegistrationAddress.House,
+                    flat = esiaUser.RegistrationAddress.Flat
+                }
+            }
         };
 
         var user = await _userServiceClient.RegisterUserAsync(registerRequest, cancellationToken);
@@ -312,6 +497,20 @@ public sealed class AuthenticationService : IAuthenticationService
         await _authUsers.AddAsync(authUser, cancellationToken);
         await _authUsers.SaveChangesAsync(cancellationToken);
         return authUser;
+    }
+
+    private static void ValidateStubRegister(EsiaStubRegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.LastName) ||
+            string.IsNullOrWhiteSpace(request.FirstName))
+            throw new AuthValidationException("Укажите фамилию и имя.");
+        if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
+            throw new AuthValidationException("Укажите корректную почту.");
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
+            throw new AuthValidationException("Укажите телефон.");
+        var phone = PhoneNormalizer.Normalize(request.PhoneNumber);
+        if (phone.Length < 11)
+            throw new AuthValidationException("Укажите телефон в формате 7XXXXXXXXXX.");
     }
 
     private async Task<TokenPairResponse> IssueTokenPairAsync(
@@ -360,5 +559,19 @@ public sealed class AuthenticationService : IAuthenticationService
     {
         if (authUser.IsBlocked)
             throw new AccountBlockedException();
+    }
+
+    private static string MapRegisterSex(string? gender) => gender?.Trim().ToUpperInvariant() switch
+    {
+        "F" or "FEMALE" or "ЖЕН" or "ЖЕНСКИЙ" => "Female",
+        _ => "Male"
+    };
+
+    private static string? NormalizeSnils(string? snils)
+    {
+        if (string.IsNullOrWhiteSpace(snils))
+            return null;
+        var digits = new string(snils.Where(char.IsDigit).ToArray());
+        return digits.Length == 11 ? digits : null;
     }
 }

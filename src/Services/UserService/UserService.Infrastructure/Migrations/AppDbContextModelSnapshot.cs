@@ -182,6 +182,51 @@ namespace UserService.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("PatientProfiles");
+
+                    b.OwnsOne("UserService.Domain.Entities.Address", "ResidenceAddress", b1 =>
+                        {
+                            b1.Property<Guid>("PatientProfileId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Area").HasColumnType("text");
+                            b1.Property<string>("City").HasColumnType("text");
+                            b1.Property<string>("Country").HasColumnType("text");
+                            b1.Property<string>("Flat").HasColumnType("text");
+                            b1.Property<string>("House").HasColumnType("text");
+                            b1.Property<string>("PostCode").HasColumnType("text");
+                            b1.Property<string>("Region").HasColumnType("text");
+                            b1.Property<string>("Street").HasColumnType("text");
+
+                            b1.HasKey("PatientProfileId");
+
+                            b1.ToTable("PatientProfiles");
+
+                            b1.WithOwner().HasForeignKey("PatientProfileId");
+                        });
+
+                    b.OwnsOne("UserService.Domain.Entities.Address", "RegistrationAddress", b1 =>
+                        {
+                            b1.Property<Guid>("PatientProfileId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Area").HasColumnType("text");
+                            b1.Property<string>("City").HasColumnType("text");
+                            b1.Property<string>("Country").HasColumnType("text");
+                            b1.Property<string>("Flat").HasColumnType("text");
+                            b1.Property<string>("House").HasColumnType("text");
+                            b1.Property<string>("PostCode").HasColumnType("text");
+                            b1.Property<string>("Region").HasColumnType("text");
+                            b1.Property<string>("Street").HasColumnType("text");
+
+                            b1.HasKey("PatientProfileId");
+
+                            b1.ToTable("PatientProfiles");
+
+                            b1.WithOwner().HasForeignKey("PatientProfileId");
+                        });
+
+                    b.Navigation("RegistrationAddress");
+                    b.Navigation("ResidenceAddress");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.Permission", b =>

@@ -96,6 +96,61 @@ public sealed class UserServiceClient : IUserServiceClient
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task ApplyEsiaProfileAsync(Guid userPublicId, EsiaUserInfo esiaUser, CancellationToken cancellationToken = default)
+    {
+        var body = new
+        {
+            firstName = esiaUser.FirstName,
+            secondName = esiaUser.MiddleName,
+            surename = esiaUser.LastName,
+            birthDate = esiaUser.BirthDate,
+            sex = MapSex(esiaUser.Gender),
+            email = esiaUser.Email,
+            snils = NormalizeSnils(esiaUser.Snils),
+            insuranceNumber = esiaUser.OmsNumber,
+            residenceAddress = MapAddress(esiaUser.ResidenceAddress),
+            registrationAddress = MapAddress(esiaUser.RegistrationAddress)
+        };
+
+        var response = await _http.PostAsJsonAsync(
+            $"internal/users/{userPublicId}/esia-profile",
+            body,
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    private static string? NormalizeSnils(string? snils)
+    {
+        if (string.IsNullOrWhiteSpace(snils))
+            return null;
+        var digits = new string(snils.Where(char.IsDigit).ToArray());
+        return digits.Length == 11 ? digits : null;
+    }
+
+    private static string? MapSex(string? gender) => gender?.Trim().ToUpperInvariant() switch
+    {
+        "M" or "MALE" or "МУЖ" or "МУЖСКОЙ" => "Male",
+        "F" or "FEMALE" or "ЖЕН" or "ЖЕНСКИЙ" => "Female",
+        _ => null
+    };
+
+    private static object? MapAddress(EsiaAddressInfo? address)
+    {
+        if (address is null)
+            return null;
+        return new
+        {
+            postCode = address.PostCode,
+            country = address.Country,
+            region = address.Region,
+            city = address.City,
+            area = address.Area,
+            street = address.Street ?? address.AddressStr,
+            house = address.House,
+            flat = address.Flat
+        };
+    }
+
     private async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)

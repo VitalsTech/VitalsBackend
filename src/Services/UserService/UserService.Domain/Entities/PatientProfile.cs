@@ -17,6 +17,9 @@ namespace UserService.Domain.Entities
         public BloodType? BloodType { get; set; }
         public string? Allergies { get; set; }
 
+        public Address? ResidenceAddress { get; set; }
+        public Address? RegistrationAddress { get; set; }
+
         public string DoctorIdsJson { get; set; } = "[]";
         public string OrganizationIdsJson { get; set; } = "[]";
 

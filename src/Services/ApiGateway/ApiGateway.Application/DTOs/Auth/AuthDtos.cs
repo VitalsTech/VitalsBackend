@@ -60,4 +60,5 @@ public sealed class TokenPairResponseDto
     public string RefreshToken { get; set; } = string.Empty;
     public int ExpiresIn { get; set; }
     public Guid UserPublicId { get; set; }
+    public object? Esia { get; set; }
 }

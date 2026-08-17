@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Common;
+using UserService.Application.DTOs.Patient;
 using UserService.Application.Exceptions;
 using UserService.Application.Interfaces;
 using UserService.Application.Services;
@@ -139,9 +140,20 @@ namespace UserService.API.Controllers
             return Ok(doctor);
         }
 
-        /// <summary>
-        /// PublicId ∪ profile ids for a user, accepting either PublicId or ProfileId as input.
-        /// </summary>
+        [HttpPost("users/{publicId:guid}/esia-profile")]
+        public async Task<ActionResult<UserWithProfilesDto>> ApplyEsiaProfile(
+            Guid publicId,
+            [FromBody] ApplyEsiaProfileRequest request)
+        {
+            try
+            {
+                return Ok(await _multiProfileUserService.ApplyEsiaProfileAsync(publicId, request));
+            }
+            catch (UserNotFoundException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+        }
         [HttpGet("users/{id:guid}/identity-ids")]
         public async Task<ActionResult<object>> ResolveIdentityIds(Guid id)
         {

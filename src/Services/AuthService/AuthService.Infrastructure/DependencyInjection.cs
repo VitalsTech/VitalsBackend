@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<UserServiceOptions>(configuration.GetSection(UserServiceOptions.SectionName));
         services.Configure<EsiaOptions>(configuration.GetSection(EsiaOptions.SectionName));
+        services.Configure<MedicalRecordServiceOptions>(configuration.GetSection(MedicalRecordServiceOptions.SectionName));
         services.Configure<ServiceAuthOptions>(configuration.GetSection(ServiceAuthOptions.SectionName));
 
         services.AddDbContext<AuthDbContext>(options =>
@@ -36,6 +37,9 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
+        services.AddMemoryCache();
+        services.AddSingleton<IEsiaAuthSessionStore, EsiaAuthSessionStore>();
+
         services.AddHttpClient<IUserServiceClient, UserServiceClient>((sp, client) =>
         {
             var serviceAuth = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ServiceAuthOptions>>().Value;
@@ -46,6 +50,15 @@ public static class DependencyInjection
             }
         });
         services.AddHttpClient<IEsiaOAuthService, EsiaOAuthService>();
+        services.AddHttpClient<IMedicalRecordEventClient, MedicalRecordEventClient>((sp, client) =>
+        {
+            var serviceAuth = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ServiceAuthOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(serviceAuth.ApiKey))
+            {
+                client.DefaultRequestHeaders.Add("X-Service-Key", serviceAuth.ApiKey);
+                client.DefaultRequestHeaders.Add("X-Service-Name", "auth-service");
+            }
+        });
 
         return services;
     }

@@ -25,6 +25,7 @@ namespace UserService.Application.Services
         Task<UserWithProfilesDto?> GetUserByPhoneAsync(string phone);
         Task<UserWithProfilesDto?> GetUserByEmailAsync(string email);
         Task<UserWithProfilesDto> UpdateDoctorProfileAsync(Guid userPublicId, UpdateDoctorProfileRequest request);
+        Task<UserWithProfilesDto> ApplyEsiaProfileAsync(Guid userPublicId, ApplyEsiaProfileRequest request);
 
         /// <summary>
         /// Resolve PublicId or ProfileId → user. Used when services store either identity.
@@ -284,7 +285,9 @@ namespace UserService.Application.Services
             {
                 Id = profile.Id,
                 BloodType = ParseOptionalEnum<BloodType>(request.BloodType, "blood type"),
-                Allergies = request.Allergies
+                Allergies = request.Allergies,
+                ResidenceAddress = MapAddress(request.ResidenceAddress),
+                RegistrationAddress = MapAddress(request.RegistrationAddress)
             };
 
             if (!string.IsNullOrEmpty(request.InsuranceNumber))
@@ -392,10 +395,12 @@ namespace UserService.Application.Services
             {
                 return new PatientProfileData
                 {
-                    InsuranceNumber = profile.PatientProfile.InsuranceNumber,
-                    SNILS = profile.PatientProfile.SNILS,
+                    InsuranceNumber = DecryptIfNeeded(profile.PatientProfile.InsuranceNumber),
+                    SNILS = DecryptIfNeeded(profile.PatientProfile.SNILS),
                     BloodType = profile.PatientProfile.BloodType?.ToString(),
                     Allergies = profile.PatientProfile.Allergies,
+                    ResidenceAddress = MapAddressDto(profile.PatientProfile.ResidenceAddress),
+                    RegistrationAddress = MapAddressDto(profile.PatientProfile.RegistrationAddress),
                     DoctorIds = profile.PatientProfile.DoctorIds,
                     OrganizationIds = profile.PatientProfile.OrganizationIds
                 };
@@ -484,6 +489,114 @@ namespace UserService.Application.Services
             return await GetUserWithProfilesAsync(userPublicId);
         }
 
+        public async Task<UserWithProfilesDto> ApplyEsiaProfileAsync(Guid userPublicId, ApplyEsiaProfileRequest request)
+        {
+            var user = await _userRepository.GetByPublicIdAsync(userPublicId)
+                ?? throw new UserNotFoundException($"User {userPublicId} not found.");
+
+            if (!string.IsNullOrWhiteSpace(request.FirstName))
+                user.FirstName = request.FirstName.Trim();
+            if (request.SecondName is not null)
+                user.SecondName = string.IsNullOrWhiteSpace(request.SecondName) ? null : request.SecondName.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Surename))
+                user.Surename = request.Surename.Trim();
+            if (request.BirthDate is { } birthDate && birthDate.Year > 1900)
+                user.BirthDate = DateTime.SpecifyKind(birthDate.Date, DateTimeKind.Utc);
+            if (!string.IsNullOrWhiteSpace(request.Sex) && Enum.TryParse<Sex>(NormalizeSex(request.Sex), true, out var sex))
+                user.Sex = sex;
+            if (!string.IsNullOrWhiteSpace(request.Email) &&
+                await _userRepository.IsEmailUniqueAsync(request.Email, user.Id))
+            {
+                user.Email = request.Email.Trim();
+            }
+
+            user.UpdateTimestamp();
+            _userRepository.UpdateUser(user);
+
+            var existingProfiles = (await _userRepository.GetProfilesByUserAsync(user.Id)).ToList();
+            var patientProfileEntity = existingProfiles.FirstOrDefault(p => p.ProfileType == ProfileType.Patient);
+            if (patientProfileEntity is null)
+            {
+                var created = await CreatePatientProfile(user.Id, new CreatePatientProfileRequest
+                {
+                    SNILS = request.SNILS,
+                    InsuranceNumber = request.InsuranceNumber,
+                    ResidenceAddress = request.ResidenceAddress,
+                    RegistrationAddress = request.RegistrationAddress
+                });
+                created.IsActive = existingProfiles.All(p => !p.IsActive);
+                await _userRepository.AddProfileAsync(created);
+                await AssignDefaultRoleAsync(user.Id, created);
+            }
+            else if (patientProfileEntity.PatientProfile is not null)
+            {
+                var patient = patientProfileEntity.PatientProfile;
+                if (!string.IsNullOrWhiteSpace(request.SNILS))
+                    patient.SNILS = _encryptionService.Encrypt(request.SNILS);
+                if (!string.IsNullOrWhiteSpace(request.InsuranceNumber))
+                    patient.InsuranceNumber = _encryptionService.Encrypt(request.InsuranceNumber);
+                if (request.ResidenceAddress is not null)
+                    patient.ResidenceAddress = MapAddress(request.ResidenceAddress);
+                if (request.RegistrationAddress is not null)
+                    patient.RegistrationAddress = MapAddress(request.RegistrationAddress);
+                _userRepository.UpdateProfile(patientProfileEntity);
+            }
+
+            await _userRepository.SaveChangesAsync();
+            return await GetUserWithProfilesAsync(userPublicId);
+        }
+
+        private static string NormalizeSex(string value) => value.Trim().ToUpperInvariant() switch
+        {
+            "M" or "MALE" or "МУЖ" or "МУЖСКОЙ" => nameof(Sex.Male),
+            "F" or "FEMALE" or "ЖЕН" or "ЖЕНСКИЙ" => nameof(Sex.Female),
+            _ => value
+        };
+
+        private static Address? MapAddress(AddressDto? dto)
+        {
+            if (dto is null)
+                return null;
+            if (string.IsNullOrWhiteSpace(dto.PostCode) &&
+                string.IsNullOrWhiteSpace(dto.Country) &&
+                string.IsNullOrWhiteSpace(dto.Region) &&
+                string.IsNullOrWhiteSpace(dto.City) &&
+                string.IsNullOrWhiteSpace(dto.Street) &&
+                string.IsNullOrWhiteSpace(dto.House) &&
+                string.IsNullOrWhiteSpace(dto.Flat) &&
+                string.IsNullOrWhiteSpace(dto.Area))
+                return null;
+
+            return new Address
+            {
+                PostCode = dto.PostCode,
+                Country = dto.Country,
+                Region = dto.Region,
+                City = dto.City,
+                Area = dto.Area,
+                Street = dto.Street,
+                House = dto.House,
+                Flat = dto.Flat
+            };
+        }
+
+        private static AddressDto? MapAddressDto(Address? address)
+        {
+            if (address is null)
+                return null;
+            return new AddressDto
+            {
+                PostCode = address.PostCode,
+                Country = address.Country,
+                Region = address.Region,
+                City = address.City,
+                Area = address.Area,
+                Street = address.Street,
+                House = address.House,
+                Flat = address.Flat
+            };
+        }
+
         public async Task<UserWithProfilesDto?> GetUserByPublicIdOrProfileIdAsync(Guid id)
         {
             try
@@ -524,6 +637,24 @@ namespace UserService.Application.Services
 
             return ids.ToList();
         }
+
+        private string? DecryptIfNeeded(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return value;
+            try
+            {
+                return _encryptionService.Decrypt(value);
+            }
+            catch (FormatException)
+            {
+                return value;
+            }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                return value;
+            }
+        }
     }
     public class PatientProfileData
     {
@@ -531,6 +662,8 @@ namespace UserService.Application.Services
         public string? SNILS { get; set; }
         public string? BloodType { get; set; }
         public string? Allergies { get; set; }
+        public AddressDto? ResidenceAddress { get; set; }
+        public AddressDto? RegistrationAddress { get; set; }
         public List<Guid> DoctorIds { get; set; } = new();
         public List<Guid> OrganizationIds { get; set; } = new();
     }

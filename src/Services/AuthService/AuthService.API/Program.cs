@@ -47,6 +47,7 @@ public static class Program
         });
 
         builder.Services.AddDistributedMemoryCache();
+        builder.Services.AddMemoryCache();
         builder.Services.AddSession(options =>
         {
             options.Cookie.HttpOnly = true;
