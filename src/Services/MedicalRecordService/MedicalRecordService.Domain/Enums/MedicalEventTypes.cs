@@ -29,6 +29,7 @@ public static class MedicalEventTypes
     public const string ConsultationCancelled = "ConsultationCancelled";
     public const string ConsultationEmergency = "ConsultationEmergency";
     public const string ConsultationExpired = "ConsultationExpired";
+    public const string MedicalCertificateIssued = "MedicalCertificateIssued";
     public const string PrescriptionSigned = "PrescriptionSigned";
     public const string PrescriptionFulfilled = "PrescriptionFulfilled";
 
@@ -57,6 +58,7 @@ public static class MedicalEventTypes
         ConsultationCancelled,
         ConsultationEmergency,
         ConsultationExpired,
+        MedicalCertificateIssued,
         PrescriptionSigned,
         PrescriptionFulfilled
     ];
@@ -111,7 +113,10 @@ public static class MedicalEventTypes
         if (value.Equals("mood_check", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("mood", StringComparison.OrdinalIgnoreCase))
             return MoodCheck;
-        if (value.Equals("referral", StringComparison.OrdinalIgnoreCase))
+            if (value.Equals("certificate", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("справка", StringComparison.OrdinalIgnoreCase))
+                return MedicalCertificateIssued;
+            if (value.Equals("referral", StringComparison.OrdinalIgnoreCase))
             return TreatmentStarted;
 
         var known = All.FirstOrDefault(t => t.Equals(value, StringComparison.OrdinalIgnoreCase));
@@ -185,6 +190,12 @@ public static class MedicalEventTypes
                 MapField(dict, "urgencyLevel", "urgencyLevel", "urgency");
                 MapField(dict, "recommendedSpecialization", "recommendedSpecialization", "specialization", "specialty");
                 MapField(dict, "recommendation", "recommendation", "recommendationText");
+                break;
+
+            case var _ when eventType.Equals(MedicalCertificateIssued, StringComparison.OrdinalIgnoreCase):
+                MapField(dict, "title", "title", "name");
+                MapField(dict, "body", "body", "text", "content");
+                MapField(dict, "type", "type", "certificateType");
                 break;
         }
 

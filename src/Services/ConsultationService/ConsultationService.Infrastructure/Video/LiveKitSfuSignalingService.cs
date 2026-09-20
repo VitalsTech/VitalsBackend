@@ -35,14 +35,29 @@ public sealed class LiveKitSfuSignalingService : ISfuSignalingService
     {
         var roomName = $"consultation-{sessionId:N}";
         await EnsureRoomExistsAsync(roomName, cancellationToken).ConfigureAwait(false);
+        return VideoRoomMapper.ApplyCommon(new VideoRoomResponse
+        {
+            RoomId = roomName,
+            ServerUrl = _options.ServerUrl,
+            AccessToken = string.Empty
+        }, _options, "sfu");
+    }
 
-        var token = CreateParticipantToken(roomName, $"participant-{sessionId:N}");
-        return new VideoRoomResponse
+    public async Task<VideoRoomResponse> IssueCredentialsAsync(
+        Guid sessionId,
+        Guid participantId,
+        string role,
+        CancellationToken cancellationToken = default)
+    {
+        var roomName = $"consultation-{sessionId:N}";
+        await EnsureRoomExistsAsync(roomName, cancellationToken).ConfigureAwait(false);
+        var token = CreateParticipantToken(roomName, $"participant-{participantId:N}");
+        return VideoRoomMapper.ApplyCommon(new VideoRoomResponse
         {
             RoomId = roomName,
             ServerUrl = _options.ServerUrl,
             AccessToken = token
-        };
+        }, _options, "sfu", role);
     }
 
     public async Task CloseRoomAsync(string roomId, CancellationToken cancellationToken = default)

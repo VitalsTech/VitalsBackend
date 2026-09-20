@@ -186,6 +186,27 @@ public sealed class ConsultationRepository : IConsultationRepository
         return true;
     }
 
+    public async Task<bool> IsParticipantAsync(
+        Guid sessionId,
+        IReadOnlyList<Guid> identityIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = identityIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (ids.Length == 0)
+            return false;
+
+        var session = await _db.Sessions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == sessionId, cancellationToken);
+        if (session is null)
+            return false;
+
+        if (ids.Contains(session.PatientId) || ids.Contains(session.DoctorId))
+            return true;
+
+        return await _db.Participants.AsNoTracking()
+            .AnyAsync(p => p.SessionId == sessionId && ids.Contains(p.UserId), cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ConsultationSession>> GetExpiredCandidatesAsync(DateTime utcNow, CancellationToken cancellationToken = default) =>
         await _db.Sessions
             .Where(x => x.Status == ConsultationStatus.Created || x.Status == ConsultationStatus.PatientJoined)
@@ -278,3 +299,26 @@ public sealed class MessageRepository : IMessageRepository
         await _db.SaveChangesAsync(cancellationToken);
     }
 }
+
+public sealed class ClinicalActionRepository : IClinicalActionRepository
+{
+    private readonly ConsultationDbContext _db;
+
+    public ClinicalActionRepository(ConsultationDbContext db) => _db = db;
+
+    public async Task AddAsync(ConsultationClinicalAction action, CancellationToken cancellationToken = default)
+    {
+        _db.ClinicalActions.Add(action);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ConsultationClinicalAction>> ListBySessionAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default) =>
+        await _db.ClinicalActions
+            .AsNoTracking()
+            .Where(x => x.SessionId == sessionId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+}
+

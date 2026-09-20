@@ -65,3 +65,23 @@ public sealed class InviteDoctorRequestDto
     public Guid DoctorId { get; set; }
     public string? DoctorName { get; set; }
 }
+
+public sealed class AddDiagnosisRequestDto
+{
+    public string Icd10 { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
+}
+
+public sealed class AddPrescriptionsRequestDto
+{
+    public IReadOnlyList<string> Lines { get; set; } = Array.Empty<string>();
+}
+
+public sealed class IssueCertificateRequestDto
+{
+    public string Type { get; set; } = "HealthStatus";
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public DateTime? ValidFrom { get; set; }
+    public DateTime? ValidUntil { get; set; }
+}

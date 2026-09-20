@@ -259,7 +259,7 @@ Build context для всех Dockerfile: каталог `src/` (Shared + Servic
 | Service-to-service key | `vitals-internal-dev-key`             | `ServiceAuth:ApiKey`                             |
 | Kafka                  | **выключен**                          | `Kafka:Enabled: false`                           |
 | ML (NER/LLM)           | stub                                  | `MlServices:UseStubModels: true`                 |
-| SFU (WebRTC)           | stub                                  | `Sfu:UseStub: true`                              |
+| SFU (WebRTC)           | P2P на DEV (`mode: p2p`); LiveKit при выкл. stub | `Sfu:UseStub: true`                              |
 | E-signature (КЭП)      | stub                                  | `ESignature:UseStub: true`                       |
 | Object storage         | stub                                  | `ObjectStorage:UseStub: true`                    |
 | Integration providers  | log-stub                              | IntegrationService                               |
@@ -352,7 +352,8 @@ k6 run tests/load/k6/notification-throughput.js   # ≥ 1000 events/s
 | [docs/MedicalRecordService.md](docs/MedicalRecordService.md) | Event store, проекции, access grants |
 | [docs/AITriageService.md](docs/AITriageService.md)           | NER, LLM triage, Kafka               |
 | [docs/RoutingService.md](docs/RoutingService.md)             | Маршрутизация, scheduler             |
-| [docs/ConsultationService.md](docs/ConsultationService.md)   | SignalR, SFU, протоколы              |
+| [docs/ConsultationService.md](docs/ConsultationService.md)   | SignalR, WebRTC, протоколы           |
+| [docs/Frontend-TZ-Video.md](docs/Frontend-TZ-Video.md)       | ТЗ фронта: видео + чат + клиника     |
 | [docs/PrescriptionService.md](docs/PrescriptionService.md)   | Рецепты, валидация, КЭП              |
 | [docs/NotificationService.md](docs/NotificationService.md)   | Каналы, шаблоны, DLQ                 |
 | [docs/Stubs.md](docs/Stubs.md)                               | Реестр заглушек и dev-only поведения |

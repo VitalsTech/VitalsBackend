@@ -9,7 +9,7 @@
 | Создание сессии | Из `routing.decision` (internal HTTP) или вручную |
 | Жизненный цикл | `CREATED` → `PATIENT_JOINED` → `DOCTOR_JOINED` → `ACTIVE` → … → `COMPLETED` |
 | Чат | REST + **SignalR** (`/hubs/consultation`) |
-| Видео | **Заглушка SFU** (`StubSfuSignalingService`) — только сигналинг |
+| Видео | **WebRTC P2P** на DEV (`StubSfuSignalingService`, `mode: p2p`, сигналинг SignalR). LiveKit/HTTP SFU при `Sfu:UseStub: false` |
 | Medical Record | HTTP → `internal/medical-records/patients/{id}/events` |
 | Kafka consumer | **Заглушка** (`routing.decision`) |
 | Kafka publisher | **Заглушка** (`consultation.created`, `consultation.completed`, …) |
@@ -33,14 +33,21 @@
 | POST | `/api/consultations/{id}/doctor-leave` | Врач вышел без протокола → `DoctorLeft` |
 | POST | `/api/consultations/{id}/complete` | Протокол + закрытие → `Completed`; в ответе и в `GET` есть `protocol` |
 | POST | `/api/consultations/{id}/confirm` | Опционально для пациента; если уже `Completed` — идемпотентно вернёт сессию |
-
-После `/complete` консультация сразу `Completed` (не ждёт confirm). Протокол пишется в медкарту
-(`ConsultationCompleted` + `DiagnosisConfirmed`), доступен в `GET /api/consultations/{id}` как `protocol`.
 | POST | `/api/consultations/{id}/cancel` | Отмена |
-| POST | `/api/consultations/{id}/video/start` | Комната SFU (stub) |
+| POST | `/api/consultations/{id}/video/start` | Старт видео (идемпотентно): P2P credentials + ICE |
+| GET | `/api/consultations/{id}/video` | Подключиться к уже идущему видео |
+| POST | `/api/consultations/{id}/video/stop` | Остановить видео (чат сессии остаётся) |
+| GET | `/api/consultations/{id}/clinical` | Диагнозы / рецепты / справки, выписанные в сессии |
+| POST | `/api/consultations/{id}/diagnoses` | Диагноз во время приёма (врач) |
+| POST | `/api/consultations/{id}/prescriptions` | Рецепт во время приёма (врач) |
+| POST | `/api/consultations/{id}/certificates` | Справка во время приёма (врач) |
 | POST | `/api/consultations/{id}/emergency` | Экстренный протокол |
 | POST | `/api/consultations/{id}/ratings` | Оценка после завершения |
 | POST | `/api/consultations/{id}/invite-doctor` | Консилиум |
+
+После `/complete` консультация сразу `Completed` (не ждёт confirm). Протокол пишется в медкарту
+(`ConsultationCompleted` + `DiagnosisConfirmed`), доступен в `GET /api/consultations/{id}` как `protocol`.
+Диагноз, рецепт и справку врач может выписать **во время** приёма (в том числе на видео), не дожидаясь complete.
 
 Internal (без JWT):
 
@@ -71,8 +78,12 @@ Internal (без JWT):
 
 - Hub: `/hubs/consultation`
 - Через Gateway: `/api/v1/consultations/hub?access_token=...`
-- Методы: `JoinSession(sessionId)`, `LeaveSession(sessionId)`
-- События: `messageReceived`, `statusChanged`
+- Методы: `JoinSession(sessionId)`, `LeaveSession(sessionId)`, `SendRtcSignal(sessionId, signal)`
+- События: `messageReceived`, `statusChanged`, `messagesRead`, `videoStarted`, `videoStopped`, `rtcSignal`, `clinicalAction`
+
+Чат консультации работает **параллельно** с видео: те же REST `/messages` и событие `messageReceived`.
+
+Клиентское ТЗ: [Frontend-TZ-Video.md](Frontend-TZ-Video.md).
 
 ## Поток из Routing
 
@@ -106,7 +117,8 @@ Gateway: `/api/v1/consultations/*`
 ## Дальше
 
 - Confluent consumer для `routing.decision`
-- Реальный SFU / WebRTC
+- Production SFU (LiveKit) + TURN
 - Redis для hot state и unread counters
 - Outbox для Medical Record при недоступности
 - Push/SMS напоминания (Notification Service)
+- Запись видео, screen share

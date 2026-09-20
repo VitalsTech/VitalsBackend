@@ -74,7 +74,9 @@ public static class Program
         }
 
         app.UseMiddleware<GlobalExceptionHandler>();
-        app.UseHttpsRedirection();
+        app.UseWhen(
+            context => !context.Request.Path.StartsWithSegments("/hubs"),
+            branch => branch.UseHttpsRedirection());
         app.UseAuthentication();
         app.UseVitalsInternalServiceAuth();
         app.UseAuthorization();

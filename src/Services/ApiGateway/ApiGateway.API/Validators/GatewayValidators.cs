@@ -61,6 +61,41 @@ public sealed class CompleteConsultationRequestDtoValidator : AbstractValidator<
     }
 }
 
+public sealed class AddDiagnosisRequestDtoValidator : AbstractValidator<AddDiagnosisRequestDto>
+{
+    public AddDiagnosisRequestDtoValidator()
+    {
+        RuleFor(x => x)
+            .Must(x => !string.IsNullOrWhiteSpace(x.Icd10) || !string.IsNullOrWhiteSpace(x.Text))
+            .WithMessage("Icd10 or Text is required.");
+        RuleFor(x => x.Icd10).MaximumLength(32);
+        RuleFor(x => x.Text).MaximumLength(500);
+    }
+}
+
+public sealed class AddPrescriptionsRequestDtoValidator : AbstractValidator<AddPrescriptionsRequestDto>
+{
+    public AddPrescriptionsRequestDtoValidator()
+    {
+        RuleFor(x => x.Lines).NotEmpty();
+        RuleForEach(x => x.Lines).NotEmpty().MaximumLength(500);
+    }
+}
+
+public sealed class IssueCertificateRequestDtoValidator : AbstractValidator<IssueCertificateRequestDto>
+{
+    private static readonly string[] AllowedTypes = ["HealthStatus", "StudyExcuse", "WorkExcuse", "Other"];
+
+    public IssueCertificateRequestDtoValidator()
+    {
+        RuleFor(x => x.Type)
+            .Must(t => string.IsNullOrWhiteSpace(t) || AllowedTypes.Contains(t, StringComparer.OrdinalIgnoreCase))
+            .WithMessage("Type must be HealthStatus, StudyExcuse, WorkExcuse, or Other.");
+        RuleFor(x => x.Title).NotEmpty().MaximumLength(256);
+        RuleFor(x => x.Body).NotEmpty().MaximumLength(4000);
+    }
+}
+
 public sealed class CreatePrescriptionRequestDtoValidator : AbstractValidator<CreatePrescriptionRequestDto>
 {
     public CreatePrescriptionRequestDtoValidator()

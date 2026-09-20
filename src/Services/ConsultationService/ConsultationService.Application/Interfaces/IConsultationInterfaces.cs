@@ -49,6 +49,7 @@ public interface IConsultationRepository
     Task SaveSessionAsync(ConsultationSession session, CancellationToken cancellationToken = default);
     Task AddTransitionAsync(SessionStatusTransition transition, CancellationToken cancellationToken = default);
     Task<bool> AddParticipantAsync(SessionParticipant participant, CancellationToken cancellationToken = default);
+    Task<bool> IsParticipantAsync(Guid sessionId, IReadOnlyList<Guid> identityIds, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ConsultationSession>> GetExpiredCandidatesAsync(DateTime utcNow, CancellationToken cancellationToken = default);
 }
 
@@ -116,6 +117,7 @@ public interface IConsultationEventPublisher
 public interface ISfuSignalingService
 {
     Task<VideoRoomResponse> CreateRoomAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task<VideoRoomResponse> IssueCredentialsAsync(Guid sessionId, Guid participantId, string role, CancellationToken cancellationToken = default);
     Task CloseRoomAsync(string roomId, CancellationToken cancellationToken = default);
 }
 
@@ -124,6 +126,15 @@ public interface IConsultationChatNotifier
     Task NotifyMessageAsync(Guid sessionId, ConsultationMessageDto message, CancellationToken cancellationToken = default);
     Task NotifyStatusChangedAsync(Guid sessionId, string status, CancellationToken cancellationToken = default);
     Task NotifyMessagesReadAsync(Guid sessionId, ParticipantRole readerRole, DateTime readAt, long lastSequence, CancellationToken cancellationToken = default);
+    Task NotifyVideoStartedAsync(Guid sessionId, VideoRoomResponse room, CancellationToken cancellationToken = default);
+    Task NotifyVideoStoppedAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    Task NotifyClinicalActionAsync(Guid sessionId, ClinicalActionDto action, CancellationToken cancellationToken = default);
+}
+
+public interface IClinicalActionRepository
+{
+    Task AddAsync(ConsultationClinicalAction action, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ConsultationClinicalAction>> ListBySessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }
 
 public interface IConsultationService
@@ -166,6 +177,12 @@ public interface IConsultationService
         IReadOnlyList<Guid>? identityIds = null,
         CancellationToken cancellationToken = default);
     Task<VideoRoomResponse> StartVideoAsync(Guid sessionId, Guid userId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
+    Task<VideoRoomResponse> JoinVideoAsync(Guid sessionId, Guid userId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
+    Task StopVideoAsync(Guid sessionId, Guid userId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
+    Task<ClinicalActionDto> AddDiagnosisAsync(Guid sessionId, Guid doctorId, AddDiagnosisRequest request, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
+    Task<ClinicalActionDto> AddPrescriptionsAsync(Guid sessionId, Guid doctorId, AddPrescriptionsRequest request, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
+    Task<ClinicalActionDto> IssueCertificateAsync(Guid sessionId, Guid doctorId, IssueCertificateRequest request, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
+    Task<ClinicalActionsResponse> ListClinicalActionsAsync(Guid sessionId, Guid userId, IReadOnlyList<Guid>? identityIds = null, CancellationToken cancellationToken = default);
     Task TriggerEmergencyAsync(Guid sessionId, Guid doctorId, CancellationToken cancellationToken = default);
     Task SubmitRatingAsync(Guid sessionId, Guid userId, SubmitRatingRequest request, CancellationToken cancellationToken = default);
     Task<ConsultationSessionResponse> InviteDoctorAsync(Guid sessionId, Guid initiatorDoctorId, InviteDoctorRequest request, CancellationToken cancellationToken = default);

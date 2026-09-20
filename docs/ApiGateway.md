@@ -16,6 +16,8 @@
 | MedicalRecords | `/api/v1/medical-records/*` | MedicalRecordService |
 | Triage | `/api/v1/triage/*` | AITriageService |
 | Consultations | `/api/v1/consultations/*` | ConsultationService |
+
+Видео-консультации (WebRTC): `POST/GET .../video/*`, клинические действия в приёме (`diagnoses`, `prescriptions`, `certificates`). Контракт для UI: [Frontend-TZ-Video.md](Frontend-TZ-Video.md). SignalR: `/api/v1/consultations/hub`.
 | Prescriptions | `/api/v1/prescriptions/*` | PrescriptionService |
 | LabOrders | `/api/v1/lab-orders/*` | PrescriptionService |
 | Notifications | `/api/v1/notifications/*` | NotificationService |

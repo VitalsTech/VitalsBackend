@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ConsultationService.Application.DTOs;
 
 public sealed class RoutingDecisionEventDto
@@ -55,6 +57,7 @@ public sealed class ConsultationSessionResponse
     public int PatientUnreadCount { get; set; }
     public int DoctorUnreadCount { get; set; }
     public string? VideoRoomId { get; set; }
+    public bool VideoActive { get; set; }
 
     /// <summary>Протокол приёма — заполняется после POST .../complete.</summary>
     public CompleteConsultationRequest? Protocol { get; set; }
@@ -163,9 +166,69 @@ public sealed class SubmitRatingRequest
 
 public sealed class VideoRoomResponse
 {
+    /// <summary>p2p — WebRTC через SignalR (DEV). sfu — LiveKit/внешний SFU.</summary>
+    public string Mode { get; set; } = "p2p";
     public string RoomId { get; set; } = string.Empty;
     public string ServerUrl { get; set; } = string.Empty;
     public string AccessToken { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public bool ChatAvailable { get; set; } = true;
+    public string SignalingHub { get; set; } = "/api/v1/consultations/hub";
+    public IReadOnlyList<IceServerDto> IceServers { get; set; } = Array.Empty<IceServerDto>();
+}
+
+public sealed class IceServerDto
+{
+    public string Urls { get; set; } = string.Empty;
+    public string? Username { get; set; }
+    public string? Credential { get; set; }
+}
+
+public sealed class RtcSignalDto
+{
+    /// <summary>offer | answer | ice | hangup | media</summary>
+    public string Type { get; set; } = string.Empty;
+    public string? Sdp { get; set; }
+    public string? Candidate { get; set; }
+    public string? SdpMid { get; set; }
+    public int? SdpMLineIndex { get; set; }
+    public bool? Audio { get; set; }
+    public bool? Video { get; set; }
+}
+
+public sealed class AddDiagnosisRequest
+{
+    public string Icd10 { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
+}
+
+public sealed class AddPrescriptionsRequest
+{
+    public IReadOnlyList<string> Lines { get; set; } = Array.Empty<string>();
+}
+
+public sealed class IssueCertificateRequest
+{
+    /// <summary>HealthStatus | StudyExcuse | WorkExcuse | Other</summary>
+    public string Type { get; set; } = "HealthStatus";
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public DateTime? ValidFrom { get; set; }
+    public DateTime? ValidUntil { get; set; }
+}
+
+public sealed class ClinicalActionDto
+{
+    public Guid Id { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public Guid CreatedByDoctorId { get; set; }
+    public JsonElement Payload { get; set; }
+}
+
+public sealed class ClinicalActionsResponse
+{
+    public IReadOnlyList<ClinicalActionDto> Items { get; set; } = Array.Empty<ClinicalActionDto>();
 }
 
 public sealed class InviteDoctorRequest
